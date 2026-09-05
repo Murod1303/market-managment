@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Calculator, Plus, Check } from 'lucide-react';
 import { Product } from '../types';
 import { calculateProductMetrics, formatSom } from '../utils/formatters';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface AddProductModalProps {
   isOpen: boolean;
@@ -29,6 +30,8 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
   onSave,
   editingProduct,
 }) => {
+  const { t, transCategory, transUnit, language } = useLanguage();
+
   const [name, setName] = useState('');
   const [category, setCategory] = useState('Oziq-ovqat');
   const [quantity, setQuantity] = useState<number | ''>(10);
@@ -87,7 +90,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
       unit,
       unitCost: numCost,
       markupPercent: numMarkup,
-      supplier: supplier.trim() || "Do'kon ombori",
+      supplier: supplier.trim() || (language === 'uz-cyrl' ? 'Дўкон омбори' : "Do'kon ombori"),
       date,
       notes: notes.trim(),
     });
@@ -105,10 +108,10 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
         <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-slate-950/60">
           <div>
             <h3 className="text-base sm:text-lg font-bold text-slate-100">
-              {editingProduct ? "Tovarni Tahrirlash" : "Yangi Tovar Qo'shish"}
+              {editingProduct ? t('editProductModalTitle') : t('addProductModalTitle')}
             </h3>
             <p className="text-xs text-slate-400 mt-0.5">
-              Kelish tannarxi va ustama foizi asosida sotish narxi va sof foydani hisoblash
+              {t('addProductModalSubtitle')}
             </p>
           </div>
           <button
@@ -122,27 +125,27 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
         {/* Live Calculation Preview Banner */}
         <div className="bg-slate-950/80 p-4 border-b border-slate-800 grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-center">
           <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800">
-            <span className="text-[11px] text-slate-400 uppercase font-semibold">1 Birlik Sotish:</span>
+            <span className="text-[11px] text-slate-400 uppercase font-semibold">{t('liveUnitSelling')}</span>
             <div className="text-xs sm:text-sm font-bold text-slate-100 mt-0.5">
-              {formatSom(metrics.unitPrice)}
+              {formatSom(metrics.unitPrice, language)}
             </div>
           </div>
           <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800">
-            <span className="text-[11px] text-slate-400 uppercase font-semibold">Jami Xarajat:</span>
+            <span className="text-[11px] text-slate-400 uppercase font-semibold">{t('liveTotalCost')}</span>
             <div className="text-xs sm:text-sm font-bold text-amber-400 mt-0.5">
-              {formatSom(metrics.totalCost)}
+              {formatSom(metrics.totalCost, language)}
             </div>
           </div>
           <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800">
-            <span className="text-[11px] text-slate-400 uppercase font-semibold">Kutilgan Tushum:</span>
+            <span className="text-[11px] text-slate-400 uppercase font-semibold">{t('liveExpRevenue')}</span>
             <div className="text-xs sm:text-sm font-bold text-emerald-400 mt-0.5">
-              {formatSom(metrics.expectedRevenue)}
+              {formatSom(metrics.expectedRevenue, language)}
             </div>
           </div>
           <div className="p-2.5 rounded-xl bg-emerald-500 text-slate-950 font-bold shadow-lg shadow-emerald-500/20 ring-1 ring-emerald-400/40">
-            <span className="text-[11px] text-slate-950/80 uppercase font-semibold">Kutilgan Sof Foyda:</span>
+            <span className="text-[11px] text-slate-950/80 uppercase font-semibold">{t('liveExpProfit')}</span>
             <div className="text-xs sm:text-sm font-extrabold mt-0.5">
-              +{formatSom(metrics.expectedProfit)}
+              +{formatSom(metrics.expectedProfit, language)}
             </div>
           </div>
         </div>
@@ -153,13 +156,13 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             {/* Tovar nomi */}
             <div className="sm:col-span-2">
               <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Tovar Nomi <span className="text-rose-400">*</span>
+                {t('colName')} <span className="text-rose-400">*</span>
               </label>
               <input
                 id="input-product-name"
                 type="text"
                 required
-                placeholder="Masalan: Shakar, Olma Semerenko, Musaffo Sut..."
+                placeholder={t('nameInputPlaceholder')}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="w-full px-3 py-2 text-sm rounded-xl border border-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 bg-slate-950 text-slate-100 placeholder-slate-500"
@@ -169,7 +172,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             {/* Kategoriya */}
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Kategoriya
+                {t('colCategory')}
               </label>
               <select
                 id="select-product-category"
@@ -179,7 +182,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
               >
                 {CATEGORIES.map((c) => (
                   <option key={c} value={c} className="bg-slate-900 text-slate-100">
-                    {c}
+                    {transCategory(c)}
                   </option>
                 ))}
               </select>
@@ -188,7 +191,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             {/* O'lchov Birligi */}
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1">
-                O'lchov Birligi
+                {t('colUnit')}
               </label>
               <select
                 id="select-product-unit"
@@ -198,7 +201,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
               >
                 {UNITS.map((u) => (
                   <option key={u} value={u} className="bg-slate-900 text-slate-100">
-                    {u}
+                    {transUnit(u)}
                   </option>
                 ))}
               </select>
@@ -207,7 +210,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             {/* Kelgan Miqdori */}
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Kelgan Miqdori
+                {t('colQuantity')}
               </label>
               <input
                 id="input-product-qty"
@@ -224,7 +227,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             {/* 1 birlik tannarxi */}
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1">
-                1 Birlik Tannarxi (kelish narxi, so'm)
+                {t('colUnitCost')} ({language === 'uz-cyrl' ? 'келиш нархи, сўм' : "kelish narxi, so'm"})
               </label>
               <input
                 id="input-product-unit-cost"
@@ -241,7 +244,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             {/* Ustama foizi */}
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Ustama Foizi (%)
+                {t('colMarkup')} (%)
               </label>
               <div className="flex items-center gap-1.5">
                 <input
@@ -274,12 +277,12 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             {/* Ta'minotchi */}
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Ta'minotchi (yetkazib beruvchi)
+                {t('supplierInputLabel')}
               </label>
               <input
                 id="input-product-supplier"
                 type="text"
-                placeholder="Masalan: Agro Baraka MCHJ"
+                placeholder={t('supplierInputPlaceholder')}
                 value={supplier}
                 onChange={(e) => setSupplier(e.target.value)}
                 className="w-full px-3 py-2 text-sm rounded-xl border border-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 bg-slate-950 text-slate-100 placeholder-slate-500"
@@ -289,7 +292,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             {/* Kelgan sana */}
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Sana
+                {t('dateLabel')}
               </label>
               <input
                 id="input-product-date"
@@ -303,12 +306,12 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             {/* Izoh */}
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Qo'shimcha Izoh
+                {t('notesInputLabel')}
               </label>
               <input
                 id="input-product-notes"
                 type="text"
-                placeholder="Masalan: 1-navli, ombor A-sektor"
+                placeholder={t('notesInputPlaceholder')}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 className="w-full px-3 py-2 text-sm rounded-xl border border-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 bg-slate-950 text-slate-100 placeholder-slate-500"
@@ -323,7 +326,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
               onClick={onClose}
               className="px-4 py-2 text-xs sm:text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-xl transition"
             >
-              Bekor qilish
+              {t('cancel')}
             </button>
             <button
               type="submit"
@@ -331,7 +334,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
               className="inline-flex items-center gap-1.5 px-5 py-2 text-xs sm:text-sm font-bold text-slate-950 bg-emerald-500 hover:bg-emerald-400 rounded-xl shadow-lg shadow-emerald-500/20 ring-1 ring-emerald-400/40 transition"
             >
               <Check className="w-4 h-4" />
-              <span>{editingProduct ? "O'zgarishlarni Saqlash" : "Jadvalga Qo'shish"}</span>
+              <span>{editingProduct ? t('saveChanges') : t('addToTable')}</span>
             </button>
           </div>
         </form>

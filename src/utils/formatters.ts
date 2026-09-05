@@ -1,11 +1,19 @@
 import { Product } from '../types';
 
-export function formatSom(amount: number): string {
-  if (isNaN(amount) || amount === null || amount === undefined) return "0 so'm";
+export function formatSom(amount: number, lang?: 'uz-latn' | 'uz-cyrl'): string {
+  const currentLang =
+    lang ||
+    (typeof window !== 'undefined'
+      ? (localStorage.getItem('smartsavdo_lang') as 'uz-latn' | 'uz-cyrl')
+      : 'uz-latn') ||
+    'uz-latn';
+  const suffix = currentLang === 'uz-cyrl' ? 'сўм' : "so'm";
+
+  if (isNaN(amount) || amount === null || amount === undefined) return `0 ${suffix}`;
   const formatted = Math.round(amount)
     .toString()
     .replace(/\B(?=(\d{3})+(?!\d))/g, " ");
-  return `${formatted} so'm`;
+  return `${formatted} ${suffix}`;
 }
 
 export function formatNumber(num: number): string {

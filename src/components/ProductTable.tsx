@@ -10,9 +10,12 @@ import {
   ArrowUpDown,
   Plus,
   RefreshCw,
+  Info,
 } from 'lucide-react';
 import { Product } from '../types';
 import { calculateProductMetrics, formatNumber, formatSom } from '../utils/formatters';
+import { useLanguage } from '../i18n/LanguageContext';
+import { ProductDetailsModal } from './ProductDetailsModal';
 
 interface ProductTableProps {
   products: Product[];
@@ -21,6 +24,7 @@ interface ProductTableProps {
   onBatchMarkup: (ids: string[], markupPercent: number) => void;
   onOpenAddModal: () => void;
   onOpenScanner: () => void;
+  onViewProductDetails?: (product: Product) => void;
 }
 
 export const ProductTable: React.FC<ProductTableProps> = ({
@@ -30,13 +34,25 @@ export const ProductTable: React.FC<ProductTableProps> = ({
   onBatchMarkup,
   onOpenAddModal,
   onOpenScanner,
+  onViewProductDetails,
 }) => {
+  const { t, transCategory, transUnit, language } = useLanguage();
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('Barchasi');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [customMarkup, setCustomMarkup] = useState<string>('');
   const [sortField, setSortField] = useState<keyof Product | 'totalCost' | 'expectedProfit'>('date');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [internalDetailProduct, setInternalDetailProduct] = useState<Product | null>(null);
+
+  const handleRowClick = (product: Product) => {
+    if (onViewProductDetails) {
+      onViewProductDetails(product);
+    } else {
+      setInternalDetailProduct(product);
+    }
+  };
 
   // Categories list
   const categories = useMemo(() => {
@@ -155,13 +171,13 @@ export const ProductTable: React.FC<ProductTableProps> = ({
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div>
             <h2 className="text-base sm:text-lg font-bold text-slate-100 flex items-center gap-2">
-              <span>Tovarlar Jadvali va Foyda Hisoblagich</span>
+              <span>{t('tableTitle')}</span>
               <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700/60 font-medium">
-                {products.length} ta
+                {products.length} {t('itemsCount')}
               </span>
             </h2>
             <p className="text-xs text-slate-400 mt-0.5">
-              Kelgan tovarlar, tannarxlar, ustama foizlari va kutilayotgan sof foyda hisob-kitobi
+              {t('tableSubtitle')}
             </p>
           </div>
 
@@ -172,15 +188,15 @@ export const ProductTable: React.FC<ProductTableProps> = ({
               className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition shadow-lg shadow-emerald-500/20 ring-1 ring-emerald-400/40"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>Tovar qo'shish</span>
+              <span>{t('addProductTable')}</span>
             </button>
             <button
               id="btn-scan-table-receipt"
               onClick={onOpenScanner}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl bg-slate-800/80 hover:bg-slate-800 text-slate-200 border border-slate-700/80 transition"
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium rounded-xl bg-slate-800/80 hover:bg-slate-800 text-slate-200 border border-slate-700/80 transition"
             >
               <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Faktura skanerlash</span>
+              <span>{t('scanReceiptTable')}</span>
             </button>
           </div>
         </div>
@@ -193,7 +209,7 @@ export const ProductTable: React.FC<ProductTableProps> = ({
               <input
                 id="input-table-search"
                 type="text"
-                placeholder="Tovar nomi, ta'minotchi qidirish..."
+                placeholder={t('searchPlaceholder')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-9 pr-3 py-1.5 text-xs sm:text-sm rounded-xl border border-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 bg-slate-950 text-slate-100 placeholder-slate-500"
@@ -204,7 +220,7 @@ export const ProductTable: React.FC<ProductTableProps> = ({
                 onClick={() => setSearchQuery('')}
                 className="text-xs text-slate-400 hover:text-slate-200 shrink-0"
               >
-                Tozalash
+                {t('clear')}
               </button>
             )}
           </div>
@@ -212,7 +228,7 @@ export const ProductTable: React.FC<ProductTableProps> = ({
           {/* Category Filter Chips */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
             <span className="text-xs text-slate-400 font-medium flex items-center gap-1 shrink-0">
-              <Filter className="w-3.5 h-3.5" /> Kategoriya:
+              <Filter className="w-3.5 h-3.5" /> {t('categoryLabel')}
             </span>
             {categories.map((cat) => (
               <button
@@ -224,7 +240,7 @@ export const ProductTable: React.FC<ProductTableProps> = ({
                     : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700/80 border border-slate-700/60'
                 }`}
               >
-                {cat}
+                {cat === 'Barchasi' ? t('allCategories') : transCategory(cat)}
               </button>
             ))}
           </div>
@@ -239,7 +255,7 @@ export const ProductTable: React.FC<ProductTableProps> = ({
             <div className="flex items-center gap-2 text-xs text-emerald-300 font-medium">
               <CheckSquare className="w-4 h-4 text-emerald-400" />
               <span>
-                <b>{selectedIds.length} ta tovar tanlandi</b>. Ommaviy ustama belgilang:
+                <b>{selectedIds.length} {t('selectedItemsCount')}</b>. {t('batchMarkupLabel')}
               </span>
             </div>
 
@@ -267,7 +283,7 @@ export const ProductTable: React.FC<ProductTableProps> = ({
                   disabled={!customMarkup}
                   className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-emerald-500/20 border border-emerald-500/40 hover:bg-emerald-500/30 text-emerald-300 disabled:opacity-50"
                 >
-                  O'rnatish
+                  {t('apply')}
                 </button>
               </div>
 
@@ -275,11 +291,22 @@ export const ProductTable: React.FC<ProductTableProps> = ({
                 onClick={() => setSelectedIds([])}
                 className="ml-2 text-xs text-emerald-400 hover:underline"
               >
-                Bekor qilish
+                {t('cancel')}
               </button>
             </div>
           </div>
         )}
+      </div>
+
+      {/* Helper Banner for Table Row Click */}
+      <div className="px-4 py-2 bg-slate-950/40 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
+        <div className="flex items-center gap-1.5">
+          <Sparkles className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+          <span className="font-medium text-slate-300">{t('clickRowNotice')}</span>
+        </div>
+        <span className="hidden md:inline-block text-[11px] text-slate-500 font-mono">
+          {filteredProducts.length} {t('itemsInStock').split(' ')[0]}
+        </span>
       </div>
 
       {/* Main Table View */}
@@ -291,7 +318,7 @@ export const ProductTable: React.FC<ProductTableProps> = ({
                 <button
                   onClick={handleSelectAll}
                   className="text-slate-400 hover:text-slate-200"
-                  title="Barchasini belgilash"
+                  title={t('selectAll')}
                 >
                   {selectedIds.length > 0 && selectedIds.length === filteredProducts.length ? (
                     <CheckSquare className="w-4 h-4 text-emerald-400" />
@@ -300,23 +327,23 @@ export const ProductTable: React.FC<ProductTableProps> = ({
                   )}
                 </button>
               </th>
-              <th className="p-3 w-12 text-center text-slate-500">№</th>
+              <th className="p-3 w-12 text-center text-slate-500">{t('colNo')}</th>
               <th
                 onClick={() => toggleSort('name')}
                 className="p-3 cursor-pointer hover:text-slate-200 select-none"
               >
                 <div className="flex items-center gap-1">
-                  <span>Tovar Nomi</span>
+                  <span>{t('colName')}</span>
                   <ArrowUpDown className="w-3 h-3 text-slate-500" />
                 </div>
               </th>
-              <th className="p-3">Kategoriya</th>
+              <th className="p-3">{t('colCategory')}</th>
               <th
                 onClick={() => toggleSort('quantity')}
                 className="p-3 text-right cursor-pointer hover:text-slate-200 select-none"
               >
                 <div className="flex items-center justify-end gap-1">
-                  <span>Kelgan Miqdori</span>
+                  <span>{t('colQuantity')}</span>
                   <ArrowUpDown className="w-3 h-3 text-slate-500" />
                 </div>
               </th>
@@ -325,7 +352,7 @@ export const ProductTable: React.FC<ProductTableProps> = ({
                 className="p-3 text-right cursor-pointer hover:text-slate-200 select-none"
               >
                 <div className="flex items-center justify-end gap-1">
-                  <span>1 Birlik Tannarxi</span>
+                  <span>{t('colUnitCost')}</span>
                   <ArrowUpDown className="w-3 h-3 text-slate-500" />
                 </div>
               </th>
@@ -334,7 +361,7 @@ export const ProductTable: React.FC<ProductTableProps> = ({
                 className="p-3 text-right cursor-pointer hover:text-slate-200 select-none bg-slate-950/40"
               >
                 <div className="flex items-center justify-end gap-1">
-                  <span>Jami Xarajat</span>
+                  <span>{t('colTotalCost')}</span>
                   <ArrowUpDown className="w-3 h-3 text-slate-500" />
                 </div>
               </th>
@@ -343,27 +370,27 @@ export const ProductTable: React.FC<ProductTableProps> = ({
                 className="p-3 text-center cursor-pointer hover:text-slate-200 select-none"
               >
                 <div className="flex items-center justify-center gap-1">
-                  <span>Ustama (%)</span>
+                  <span>{t('colMarkup')}</span>
                   <ArrowUpDown className="w-3 h-3 text-slate-500" />
                 </div>
               </th>
               <th className="p-3 text-right font-bold text-slate-200">
-                1 Birlik Sotish Narxi
+                {t('colUnitPrice')}
               </th>
               <th className="p-3 text-right font-medium text-emerald-400">
-                Kutilayotgan Tushum
+                {t('colExpectedRevenue')}
               </th>
               <th
                 onClick={() => toggleSort('expectedProfit')}
                 className="p-3 text-right cursor-pointer hover:text-teal-200 select-none bg-teal-950/20 font-bold text-teal-300"
               >
                 <div className="flex items-center justify-end gap-1">
-                  <span>Kutilayotgan Sof Foyda</span>
+                  <span>{t('colExpectedProfit')}</span>
                   <ArrowUpDown className="w-3 h-3 text-teal-400" />
                 </div>
               </th>
-              <th className="p-3">Sana & Ta'minotchi</th>
-              <th className="p-3 text-center w-20">Amallar</th>
+              <th className="p-3">{t('colDateSupplier')}</th>
+              <th className="p-3 text-center w-20">{t('colActions')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800/60">
@@ -371,9 +398,9 @@ export const ProductTable: React.FC<ProductTableProps> = ({
               <tr>
                 <td colSpan={13} className="p-8 text-center text-slate-400">
                   <div className="max-w-xs mx-auto space-y-2">
-                    <p className="font-medium text-slate-200">Hech qanday tovar topilmadi</p>
+                    <p className="font-medium text-slate-200">{t('noProductsFound')}</p>
                     <p className="text-xs text-slate-500">
-                      Qidiruv so'zini o'zgartiring yoki yangi tovar/faktura qo'shing.
+                      {t('noProductsDesc')}
                     </p>
                   </div>
                 </td>
@@ -387,15 +414,21 @@ export const ProductTable: React.FC<ProductTableProps> = ({
                   <tr
                     key={product.id}
                     id={`product-row-${product.id}`}
-                    className={`hover:bg-slate-800/40 transition-colors text-slate-200 ${
+                    onClick={() => handleRowClick(product)}
+                    className={`hover:bg-slate-800/60 cursor-pointer transition-colors text-slate-200 group ${
                       isSelected ? 'bg-emerald-950/30' : ''
                     }`}
+                    title={t('clickRowNotice')}
                   >
                     {/* Checkbox */}
                     <td className="p-3 text-center">
                       <button
-                        onClick={() => handleToggleSelect(product.id)}
-                        className="text-slate-500 hover:text-slate-300"
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleSelect(product.id);
+                        }}
+                        className="text-slate-500 hover:text-slate-300 transition"
                       >
                         {isSelected ? (
                           <CheckSquare className="w-4 h-4 text-emerald-400" />
@@ -413,7 +446,9 @@ export const ProductTable: React.FC<ProductTableProps> = ({
                     {/* Name */}
                     <td className="p-3 font-semibold text-slate-100">
                       <div className="flex flex-col">
-                        <span>{product.name}</span>
+                        <span className="group-hover:text-emerald-300 transition font-semibold">
+                          {product.name}
+                        </span>
                         {product.notes && (
                           <span className="text-[11px] font-normal text-slate-400 line-clamp-1">
                             {product.notes}
@@ -425,24 +460,24 @@ export const ProductTable: React.FC<ProductTableProps> = ({
                     {/* Category */}
                     <td className="p-3 text-slate-300">
                       <span className="inline-block px-2.5 py-0.5 rounded-lg text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700/60">
-                        {product.category}
+                        {transCategory(product.category)}
                       </span>
                     </td>
 
                     {/* Quantity & Unit */}
                     <td className="p-3 text-right font-medium text-slate-100">
                       <span>{formatNumber(product.quantity)}</span>{' '}
-                      <span className="text-xs text-slate-400 font-normal">{product.unit}</span>
+                      <span className="text-xs text-slate-400 font-normal">{transUnit(product.unit)}</span>
                     </td>
 
                     {/* Unit Cost */}
                     <td className="p-3 text-right text-slate-300 font-mono">
-                      {formatSom(product.unitCost)}
+                      {formatSom(product.unitCost, language)}
                     </td>
 
                     {/* Total Cost */}
                     <td className="p-3 text-right font-semibold text-slate-100 font-mono bg-slate-950/20">
-                      {formatSom(metrics.totalCost)}
+                      {formatSom(metrics.totalCost, language)}
                     </td>
 
                     {/* Markup % */}
@@ -454,24 +489,24 @@ export const ProductTable: React.FC<ProductTableProps> = ({
 
                     {/* Unit Selling Price */}
                     <td className="p-3 text-right font-bold text-slate-100 font-mono">
-                      {formatSom(metrics.unitPrice)}
+                      {formatSom(metrics.unitPrice, language)}
                     </td>
 
                     {/* Expected Revenue */}
                     <td className="p-3 text-right font-medium text-emerald-400 font-mono">
-                      {formatSom(metrics.expectedRevenue)}
+                      {formatSom(metrics.expectedRevenue, language)}
                     </td>
 
                     {/* Expected Net Profit */}
                     <td className="p-3 text-right font-bold text-teal-300 font-mono bg-teal-950/20">
-                      +{formatSom(metrics.expectedProfit)}
+                      +{formatSom(metrics.expectedProfit, language)}
                     </td>
 
                     {/* Date & Supplier */}
                     <td className="p-3 text-xs text-slate-300">
                       <div className="flex flex-col">
                         <span className="font-medium text-slate-200 truncate max-w-[140px]">
-                          {product.supplier || "Do'kon ombori"}
+                          {product.supplier || t('defaultSupplier')}
                         </span>
                         <span className="text-slate-500 font-mono text-[11px]">{product.date}</span>
                       </div>
@@ -481,16 +516,24 @@ export const ProductTable: React.FC<ProductTableProps> = ({
                     <td className="p-3 text-center">
                       <div className="flex items-center justify-center gap-1">
                         <button
-                          onClick={() => onEditProduct(product)}
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onEditProduct(product);
+                          }}
                           className="p-1 rounded text-slate-400 hover:text-sky-400 hover:bg-slate-800 transition"
-                          title="Tahrirlash"
+                          title={t('edit')}
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
                         <button
-                          onClick={() => onDeleteProduct(product.id)}
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDeleteProduct(product.id);
+                          }}
                           className="p-1 rounded text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition"
-                          title="O'chirish"
+                          title={t('delete')}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -505,32 +548,47 @@ export const ProductTable: React.FC<ProductTableProps> = ({
           {/* Sticky / Real-time Total Summary Footer */}
           <tfoot>
             <tr className="bg-slate-950 text-slate-200 font-semibold text-xs sm:text-sm border-t-2 border-slate-800">
-              <td className="p-3.5 text-center font-bold text-slate-300">JAMI</td>
-              <td className="p-3.5 text-slate-400 text-xs font-mono">{totals.count} xil</td>
+              <td className="p-3.5 text-center font-bold text-slate-300">{t('totalRow')}</td>
+              <td className="p-3.5 text-slate-400 text-xs font-mono">{totals.count} {t('itemsInStock').split(' ')[0]}</td>
               <td className="p-3.5 font-bold text-slate-100" colSpan={3}>
-                JAMI HISOBLANGAN KO'RSATKICHLAR
+                {t('totalIndicators')}
               </td>
-              <td className="p-3.5 text-slate-400 text-xs text-right font-mono">Xarajat:</td>
+              <td className="p-3.5 text-slate-400 text-xs text-right font-mono">{t('totalCostLabel')}</td>
               <td className="p-3.5 text-right font-mono text-amber-400 font-bold">
-                {formatSom(totals.totalCost)}
+                {formatSom(totals.totalCost, language)}
               </td>
               <td className="p-3.5 text-center font-mono text-xs text-slate-300">
-                O'rtacha: +{totals.avgMarkup}%
+                {t('avgLabel')} +{totals.avgMarkup}%
               </td>
-              <td className="p-3.5 text-slate-400 text-xs text-right font-mono">Tushum:</td>
+              <td className="p-3.5 text-slate-400 text-xs text-right font-mono">{t('revenueLabel')}</td>
               <td className="p-3.5 text-right font-mono text-emerald-400 font-bold">
-                {formatSom(totals.totalRevenue)}
+                {formatSom(totals.totalRevenue, language)}
               </td>
               <td className="p-3.5 text-right font-mono text-teal-300 font-bold text-sm bg-teal-950/70">
-                +{formatSom(totals.totalProfit)}
+                +{formatSom(totals.totalProfit, language)}
               </td>
               <td colSpan={2} className="p-3.5 text-xs text-slate-400 text-right">
-                Sof foyda kafolatlangan
+                {t('guaranteedProfit')}
               </td>
             </tr>
           </tfoot>
         </table>
       </div>
+
+      {/* Product Details Modal (Self-contained or fallback) */}
+      <ProductDetailsModal
+        product={internalDetailProduct}
+        isOpen={Boolean(internalDetailProduct)}
+        onClose={() => setInternalDetailProduct(null)}
+        onEdit={(p) => {
+          setInternalDetailProduct(null);
+          onEditProduct(p);
+        }}
+        onDelete={(id) => {
+          setInternalDetailProduct(null);
+          onDeleteProduct(id);
+        }}
+      />
     </div>
   );
 };

@@ -13,9 +13,11 @@ import { QuickSearchDrawer } from './components/QuickSearchDrawer';
 import { FinancialStatsModal } from './components/FinancialStatsModal';
 import { ExcelManagerModal } from './components/ExcelManagerModal';
 import { TelegramSimulatorModal } from './components/TelegramSimulatorModal';
+import { ProductDetailsModal } from './components/ProductDetailsModal';
 import { LoginScreen } from './components/LoginScreen';
 import { Product, AuthUser } from './types';
 import { initialProducts } from './data/initialProducts';
+import { useLanguage } from './i18n/LanguageContext';
 import {
   Sparkles,
   RotateCcw,
@@ -33,6 +35,7 @@ import {
 } from 'lucide-react';
 
 export default function App() {
+  const { t, language } = useLanguage();
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
@@ -50,6 +53,7 @@ export default function App() {
   const [isTelegramModalOpen, setIsTelegramModalOpen] = useState<boolean>(false);
   const [isQuickSearchOpen, setIsQuickSearchOpen] = useState<boolean>(false);
   const [isTelegramWebAppView, setIsTelegramWebAppView] = useState<boolean>(false);
+  const [selectedDetailProduct, setSelectedDetailProduct] = useState<Product | null>(null);
 
   // Notification Toast
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -151,14 +155,14 @@ export default function App() {
     localStorage.removeItem('smartsavdo_auth_user');
     setCurrentUser(null);
     setAuthToken(null);
-    showToast('Tizimdan muvaffaqiyatli chiqildi');
+    showToast(t('logoutSuccess'));
   };
 
   // Login Success Handler
   const handleLoginSuccess = (user: AuthUser, token: string) => {
     setCurrentUser(user);
     setAuthToken(token);
-    showToast(`Xush kelibsiz, ${user.name}!`);
+    showToast(`${t('welcome')}, ${user.name}!`);
   };
 
   // Save/Update Product
@@ -222,7 +226,7 @@ export default function App() {
 
   // Delete Product
   const handleDeleteProduct = async (id: string) => {
-    if (!window.confirm("Haqiqatan ham ushbu tovarni ro'yxatdan o'chirmoqchimisiz?")) {
+    if (!window.confirm(t('confirmDeleteProduct'))) {
       return;
     }
 
@@ -295,7 +299,7 @@ export default function App() {
 
   // Reset to default inventory
   const handleResetDemoData = async () => {
-    if (!window.confirm("Barcha ma'lumotlarni namunaviy tovarlar ro'yxatiga qaytarmoqchimisiz?")) {
+    if (!window.confirm(t('confirmResetDemo'))) {
       return;
     }
 
@@ -323,9 +327,9 @@ export default function App() {
         </div>
         <div className="flex items-center gap-2 text-sm font-semibold text-slate-200">
           <ShieldCheck className="w-4 h-4 text-emerald-400" />
-          <span>SmartSavdo xavfsizlik tekshiruvi...</span>
+          <span>{t('securityCheck')}</span>
         </div>
-        <p className="text-xs text-slate-500 mt-1">Avtorizatsiya ma'lumotlari yuklanmoqda</p>
+        <p className="text-xs text-slate-500 mt-1">{t('loadingAuth')}</p>
       </div>
     );
   }
@@ -379,10 +383,10 @@ export default function App() {
               onClick={() => setIsTelegramWebAppView(false)}
               className="text-xs font-semibold hover:underline flex items-center gap-1 text-slate-300 hover:text-white"
             >
-              ← Web rejimiga qaytish
+              {t('webAppBackToWeb')}
             </button>
             <div className="text-center">
-              <span className="text-sm font-bold block text-slate-100">SmartSavdo WebApp</span>
+              <span className="text-sm font-bold block text-slate-100">{t('webAppTitle')}</span>
               <span className="text-[10px] text-slate-400">
                 {currentUser.name} ({currentUser.roleTitle})
               </span>
@@ -390,15 +394,15 @@ export default function App() {
             <div className="flex items-center gap-2">
               <div className="hidden sm:flex items-center gap-1.5 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/30">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span className="text-[11px] text-emerald-400 font-medium">Avtorizatsiyalangan</span>
+                <span className="text-[11px] text-emerald-400 font-medium">{t('webAppAuthorized')}</span>
               </div>
               <button
                 onClick={handleLogout}
                 className="p-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs flex items-center gap-1 transition"
-                title="Tizimdan chiqish"
+                title={t('logoutTooltip')}
               >
                 <LogOut className="w-3.5 h-3.5" />
-                <span className="hidden md:inline">Chiqish</span>
+                <span className="hidden md:inline">{t('logout')}</span>
               </button>
             </div>
           </div>
@@ -412,7 +416,7 @@ export default function App() {
                 className="p-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex flex-col items-center gap-2 shadow-lg shadow-emerald-500/20 ring-1 ring-emerald-400/40 transition"
               >
                 <ScanLine className="w-5 h-5" />
-                <span>AI Skaner</span>
+                <span>{t('scannerShort')}</span>
               </button>
 
               <button
@@ -420,7 +424,7 @@ export default function App() {
                 className="p-3.5 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-sky-300 font-bold text-xs flex flex-col items-center gap-2 border border-slate-700/80 transition"
               >
                 <Search className="w-5 h-5 text-sky-400" />
-                <span>Tezkor Qidiruv</span>
+                <span>{t('searchBtn')}</span>
               </button>
 
               <button
@@ -428,7 +432,7 @@ export default function App() {
                 className="p-3.5 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-slate-200 font-bold text-xs flex flex-col items-center gap-2 border border-slate-700/80 transition"
               >
                 <FileText className="w-5 h-5 text-blue-400" />
-                <span>Statistika & PDF</span>
+                <span>{t('statsPdfBtn')}</span>
               </button>
 
               <button
@@ -436,7 +440,7 @@ export default function App() {
                 className="p-3.5 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 font-bold text-xs flex flex-col items-center gap-2 border border-sky-500/40 transition"
               >
                 <MessageSquare className="w-5 h-5" />
-                <span>Telegram Chat</span>
+                <span>{t('telegramBotBtn')}</span>
               </button>
             </div>
 
@@ -468,7 +472,7 @@ export default function App() {
                 className="w-full py-3.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-sm uppercase tracking-wider shadow-lg shadow-emerald-500/20 ring-1 ring-emerald-400/40 flex items-center justify-center gap-2 transition"
               >
                 <ScanLine className="w-5 h-5" />
-                <span>CHEK YOKI FAKTURANI AI BILAN SKANERLASH</span>
+                <span>{t('webAppScanBigBtn')}</span>
               </button>
             </div>
           </div>
@@ -504,16 +508,14 @@ export default function App() {
                     AI Gemini Vision 3.8
                   </span>
                   <span className="text-xs text-slate-400">
-                    O'zbekiston so'mida real vaqtda hisob-kitob
+                    {t('heroRealtimeCalculation')}
                   </span>
                 </div>
                 <h2 className="text-lg sm:text-2xl font-bold tracking-tight text-slate-100">
-                  Tovar Tannarxlari, Kelgan Nakladnoylar va Sof Foyda Boshqaruvi
+                  {t('heroHeading')}
                 </h2>
                 <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-                  Do'konga kelgan chek yoki qog'oz faktura rasmini yuklang, AI avtomatik tovarlar
-                  va tannarxlarni ajratadi, ustama foizini belgilang va bir zumda sotish narxi hamda
-                  sof foydani Excelga oling.
+                  {t('heroSubtitle')}
                 </p>
               </div>
 
@@ -525,7 +527,7 @@ export default function App() {
                   className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs sm:text-sm shadow-lg shadow-emerald-500/20 ring-1 ring-emerald-400/40 transition flex items-center gap-2"
                 >
                   <ScanLine className="w-4 h-4" />
-                  <span>Faktura Skanerlash</span>
+                  <span>{t('heroScanInvoice')}</span>
                 </button>
 
                 <button
@@ -534,13 +536,13 @@ export default function App() {
                   className="px-4 py-2.5 rounded-xl bg-slate-800/90 hover:bg-slate-800 text-sky-300 font-semibold text-xs sm:text-sm border border-sky-500/30 transition flex items-center gap-2"
                 >
                   <MessageSquare className="w-4 h-4 text-sky-400" />
-                  <span>Telegram Bot</span>
+                  <span>{t('telegramBotBtn')}</span>
                 </button>
 
                 <button
                   onClick={handleResetDemoData}
                   className="p-2.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 hover:border-slate-700 transition"
-                  title="Namunaviy tovarlarni qayta yuklash"
+                  title={t('heroResetTooltip')}
                 >
                   <RotateCcw className="w-4 h-4" />
                 </button>
@@ -567,6 +569,7 @@ export default function App() {
                   setIsAddModalOpen(true);
                 }}
                 onOpenScanner={() => setIsScannerOpen(true)}
+                onViewProductDetails={(p) => setSelectedDetailProduct(p)}
               />
             </section>
           </main>
@@ -575,9 +578,9 @@ export default function App() {
           <footer className="bg-slate-950 border-t border-slate-800/80 mt-auto py-6 text-slate-400">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
               <div className="flex items-center gap-2">
-                <span className="font-semibold text-slate-200">SmartSavdo Tizimi</span>
+                <span className="font-semibold text-slate-200">{t('footerSystem')}</span>
                 <span className="text-slate-600">•</span>
-                <span>Tovarlar, xarajatlar va kassa tushumi hisoblagichi</span>
+                <span>{t('footerDesc')}</span>
               </div>
               <div className="flex items-center gap-4">
                 <button
@@ -585,10 +588,10 @@ export default function App() {
                   className="text-emerald-400 hover:underline flex items-center gap-1 font-medium"
                 >
                   <Smartphone className="w-3.5 h-3.5" />
-                  Telegram WebApp ko'rinishi
+                  {t('footerTelegramView')}
                 </button>
                 <span className="text-slate-600">•</span>
-                <span>O'zbekiston So'mi (UZS)</span>
+                <span>{t('footerCurrency')}</span>
               </div>
             </div>
           </footer>
@@ -620,6 +623,7 @@ export default function App() {
         isOpen={isQuickSearchOpen}
         onClose={() => setIsQuickSearchOpen(false)}
         products={products}
+        onSelectProduct={(p) => setSelectedDetailProduct(p)}
       />
 
       {/* 4. Financial Statistics & A4 PDF Report Modal */}
@@ -663,6 +667,22 @@ export default function App() {
           setIsTelegramModalOpen(false);
           setIsTelegramWebAppView(true);
           showToast("SmartSavdo WebApp ilovasi ishga tushirildi!");
+        }}
+      />
+
+      {/* 7. Product Full Details Modal */}
+      <ProductDetailsModal
+        product={selectedDetailProduct}
+        isOpen={Boolean(selectedDetailProduct)}
+        onClose={() => setSelectedDetailProduct(null)}
+        onEdit={(p) => {
+          setSelectedDetailProduct(null);
+          setEditingProduct(p);
+          setIsAddModalOpen(true);
+        }}
+        onDelete={(id) => {
+          setSelectedDetailProduct(null);
+          handleDeleteProduct(id);
         }}
       />
 

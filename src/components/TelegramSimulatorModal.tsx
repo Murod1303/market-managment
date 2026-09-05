@@ -23,6 +23,7 @@ import { Product, TelegramMessage, AuthUser } from '../types';
 import { exportProductsToExcel } from '../utils/excelManager';
 import { generateStorePdfReport } from '../utils/pdfGenerator';
 import { formatSom } from '../utils/formatters';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface TelegramSimulatorModalProps {
   isOpen: boolean;
@@ -39,6 +40,7 @@ export const TelegramSimulatorModal: React.FC<TelegramSimulatorModalProps> = ({
   onProductsUpdated,
   onOpenWebAppWithAuth,
 }) => {
+  const { t, language } = useLanguage();
   const [activeTab, setActiveTab] = useState<'chat' | 'setup'>('chat');
   const [botSessionToken, setBotSessionToken] = useState<string | null>(() => {
     return localStorage.getItem('smartsavdo_auth_token') || null;
@@ -48,13 +50,22 @@ export const TelegramSimulatorModal: React.FC<TelegramSimulatorModalProps> = ({
     return raw ? JSON.parse(raw) : null;
   });
 
+  const getInitialBotMsg = () => {
+    if (language === 'uz-cyrl') {
+      return botSessionToken
+        ? "👋 <b>Ассалому алайкум!</b>\nМен дўкон товарлари ва ҳисоб-китоблар ботиман.\n\n🛡️ <b>Сиз авторизациядан ўтгансиз</b>.\n\nТезкор буйруқлар:\n• <code>/search [номи]</code> — товар нархи ва қолдиғи\n• <code>/statistika</code> — касса ва соф фойда\n• <code>/excel</code> — Excel жадвали\n• <code>/pdf</code> — A4 ҳисобот\n• <code>/webapp</code> — WebApp дўкон иловасини очиш\n• 📸 Чек расмини юбориш — AI таҳлил"
+        : "👋 <b>Ассалому алайкум!</b>\nМен <b>SmartSavdo</b> дўкон бошқарув ботиман.\n\n🔒 <b>Хавфсизлик талаби:</b> Маълумотларни кўриш ва амалларни бажариш учун аввал тизимга киринг:\n👉 <code>/login [логин] [парол]</code>\n\nМисол:\n• <code>/login admin admin123</code> (Бошқарувчи)\n• <code>/login kassir kassa2026</code> (Кассир)";
+    }
+    return botSessionToken
+      ? "👋 <b>Assalomu alaykum!</b>\nMen do'kon tovarlari va hisob-kitoblar botiman.\n\n🛡️ <b>Siz avtorizatsiyadan o'tgansiz</b>.\n\nTezkor buyruqlar:\n• <code>/search [nomi]</code> — tovar narxi va qoldig'i\n• <code>/statistika</code> — kassa va sof foyda\n• <code>/excel</code> — Excel jadvali\n• <code>/pdf</code> — A4 hisobot\n• <code>/webapp</code> — WebApp do'kon ilovasini ochish\n• 📸 Chek rasmini yuborish — AI tahlil"
+      : "👋 <b>Assalomu alaykum!</b>\nMen <b>SmartSavdo</b> do'kon boshqaruv botiman.\n\n🔒 <b>Xavfsizlik talabi:</b> Ma'lumotlarni ko'rish va amallarni bajarish uchun avval tizimga kiring:\n👉 <code>/login [login] [parol]</code>\n\nMisol:\n• <code>/login admin admin123</code> (Boshqaruvchi)\n• <code>/login kassir kassa2026</code> (Kassir)";
+  };
+
   const [messages, setMessages] = useState<TelegramMessage[]>([
     {
       id: 'msg-1',
       sender: 'bot',
-      text: botSessionToken
-        ? "👋 <b>Assalomu alaykum!</b>\nMen do'kon tovarlari va hisob-kitoblar botiman.\n\n🛡️ <b>Siz avtorizatsiyadan o'tgansiz</b>.\n\nTezkor buyruqlar:\n• <code>/search [nomi]</code> — tovar narxi va qoldig'i\n• <code>/statistika</code> — kassa va sof foyda\n• <code>/excel</code> — Excel jadvali\n• <code>/pdf</code> — A4 hisobot\n• <code>/webapp</code> — WebApp do'kon ilovasini ochish\n• 📸 Chek rasmini yuborish — AI tahlil"
-        : "👋 <b>Assalomu alaykum!</b>\nMen <b>SmartSavdo</b> do'kon boshqaruv botiman.\n\n🔒 <b>Xavfsizlik talabi:</b> Ma'lumotlarni ko'rish va amallarni bajarish uchun avval tizimga kiring:\n👉 <code>/login [login] [parol]</code>\n\nMisol:\n• <code>/login admin admin123</code> (Boshqaruvchi)\n• <code>/login kassir kassa2026</code> (Kassir)",
+      text: getInitialBotMsg(),
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       actionType: botSessionToken ? undefined : 'login_required',
     },
@@ -156,7 +167,7 @@ export const TelegramSimulatorModal: React.FC<TelegramSimulatorModalProps> = ({
         {
           id: `err-${Date.now()}`,
           sender: 'bot',
-          text: "⚠️ Xatolik yuz berdi: " + err.message,
+          text: (language === 'uz-cyrl' ? "⚠️ Хатолик юз берди: " : "⚠️ Xatolik yuz berdi: ") + err.message,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         },
       ]);
@@ -212,7 +223,12 @@ export const TelegramSimulatorModal: React.FC<TelegramSimulatorModalProps> = ({
     const reader = new FileReader();
     reader.onload = (event) => {
       const base64 = event.target?.result as string;
-      handleSendMessage('📷 Chek / hisob-faktura rasmi yuborildi', base64);
+      handleSendMessage(
+        language === 'uz-cyrl'
+          ? '📷 Чек / ҳисоб-фактура расми юборилди'
+          : '📷 Chek / hisob-faktura rasmi yuborildi',
+        base64
+      );
     };
     reader.readAsDataURL(file);
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -221,7 +237,11 @@ export const TelegramSimulatorModal: React.FC<TelegramSimulatorModalProps> = ({
   // Set real webhook
   const handleSetRealWebhook = async () => {
     if (!botToken.trim()) {
-      setWebhookStatus('⚠️ Iltimos, Telegram Bot tokeningizni kiriting');
+      setWebhookStatus(
+        language === 'uz-cyrl'
+          ? '⚠️ Илтимос, Telegram Bot токенингизни киритинг'
+          : '⚠️ Iltimos, Telegram Bot tokeningizni kiriting'
+      );
       return;
     }
 
@@ -237,12 +257,20 @@ export const TelegramSimulatorModal: React.FC<TelegramSimulatorModalProps> = ({
 
       const data = await res.json();
       if (data.ok) {
-        setWebhookStatus(`✅ Webhook muvaffaqiyatli ulandi! Telegram botingiz faollashdi.`);
+        setWebhookStatus(
+          language === 'uz-cyrl'
+            ? `✅ Webhook муваффақиятли уланди! Telegram ботингиз фаоллашди.`
+            : `✅ Webhook muvaffaqiyatli ulandi! Telegram botingiz faollashdi.`
+        );
       } else {
-        setWebhookStatus(`❌ Telegram xatoligi: ${data.description || 'Noma\'lum xatolik'}`);
+        setWebhookStatus(
+          language === 'uz-cyrl'
+            ? `❌ Telegram хатолиги: ${data.description || 'Номаълум хатолик'}`
+            : `❌ Telegram xatoligi: ${data.description || "Noma'lum xatolik"}`
+        );
       }
     } catch (err: any) {
-      setWebhookStatus(`❌ Xatolik: ${err.message}`);
+      setWebhookStatus(language === 'uz-cyrl' ? `❌ Хатолик: ${err.message}` : `❌ Xatolik: ${err.message}`);
     } finally {
       setIsSettingWebhook(false);
     }
@@ -271,12 +299,15 @@ export const TelegramSimulatorModal: React.FC<TelegramSimulatorModalProps> = ({
                 {botSessionToken ? (
                   <span className="text-emerald-400 font-medium flex items-center gap-1 truncate">
                     <ShieldCheck className="w-3 h-3 text-emerald-400" />
-                    <span>{botUser?.name || 'Admin'} (Avtorizatsiyalangan)</span>
+                    <span>
+                      {botUser?.name || 'Admin'} (
+                      {language === 'uz-cyrl' ? 'Авторизацияланган' : 'Avtorizatsiyalangan'})
+                    </span>
                   </span>
                 ) : (
                   <span className="text-amber-400 font-medium flex items-center gap-1">
                     <Lock className="w-3 h-3 text-amber-400" />
-                    <span>Kirilmagan</span>
+                    <span>{language === 'uz-cyrl' ? 'Кирилмаган' : 'Kirilmagan'}</span>
                   </span>
                 )}
               </div>
@@ -288,10 +319,10 @@ export const TelegramSimulatorModal: React.FC<TelegramSimulatorModalProps> = ({
               <button
                 onClick={() => handleSendMessage('/logout')}
                 className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-semibold mr-1 transition"
-                title="Bot sessiyasidan chiqish"
+                title={language === 'uz-cyrl' ? 'Бот сессиясидан чиқиш' : 'Bot sessiyasidan chiqish'}
               >
                 <LogOut className="w-3 h-3" />
-                <span>Chiqish</span>
+                <span>{language === 'uz-cyrl' ? 'Чиқиш' : 'Chiqish'}</span>
               </button>
             )}
 
@@ -370,7 +401,7 @@ export const TelegramSimulatorModal: React.FC<TelegramSimulatorModalProps> = ({
                               onClick={() => handleSelectMarkup(p)}
                               className="px-2.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition shadow-lg shadow-emerald-500/20"
                             >
-                              +{p}% ustama
+                              +{p}% {language === 'uz-cyrl' ? 'устама' : 'ustama'}
                             </button>
                           ))}
                         </div>
@@ -389,7 +420,7 @@ export const TelegramSimulatorModal: React.FC<TelegramSimulatorModalProps> = ({
                             className="w-full py-2 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 transition shadow-lg shadow-emerald-500/20"
                           >
                             <Download className="w-4 h-4" />
-                            <span>tovarlar_va_hisob_kitob.xlsx yuklash</span>
+                            <span>tovarlar_va_hisob_kitob.xlsx {language === 'uz-cyrl' ? 'юклаш' : 'yuklash'}</span>
                           </button>
                         </div>
                       )}
@@ -409,7 +440,12 @@ export const TelegramSimulatorModal: React.FC<TelegramSimulatorModalProps> = ({
                             className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 transition shadow-lg shadow-emerald-500/25 cursor-pointer"
                           >
                             <Smartphone className="w-4 h-4" />
-                            <span>🚀 SmartSavdo WebApp Ilovasini Ochish</span>
+                            <span>
+                              🚀{' '}
+                              {language === 'uz-cyrl'
+                                ? 'SmartSavdo WebApp Иловасини Очиш'
+                                : 'SmartSavdo WebApp Ilovasini Ochish'}
+                            </span>
                           </button>
                         </div>
                       )}
@@ -427,7 +463,7 @@ export const TelegramSimulatorModal: React.FC<TelegramSimulatorModalProps> = ({
                             onClick={() => handleSendMessage('/login kassir kassa2026')}
                             className="flex-1 py-2 px-2.5 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 text-xs font-semibold text-left sm:text-center transition"
                           >
-                            👤 Kassir (/login kassir kassa2026)
+                            👤 {language === 'uz-cyrl' ? 'Кассир' : 'Kassir'} (/login kassir kassa2026)
                           </button>
                         </div>
                       )}
@@ -443,7 +479,7 @@ export const TelegramSimulatorModal: React.FC<TelegramSimulatorModalProps> = ({
                             className="w-full py-2 px-3 rounded-xl bg-rose-500 hover:bg-rose-400 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition shadow-md"
                           >
                             <Download className="w-4 h-4" />
-                            <span>dokon_hisobot_A4.pdf yuklash</span>
+                            <span>dokon_hisobot_A4.pdf {language === 'uz-cyrl' ? 'юклаш' : 'yuklash'}</span>
                           </button>
                         </div>
                       )}
@@ -462,7 +498,9 @@ export const TelegramSimulatorModal: React.FC<TelegramSimulatorModalProps> = ({
               {isBotTyping && (
                 <div className="flex items-center gap-2 text-xs text-slate-400 italic">
                   <div className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></div>
-                  <span>SmartSavdo bot yozmoqda...</span>
+                  <span>
+                    {language === 'uz-cyrl' ? 'SmartSavdo бот ёзмоқда...' : 'SmartSavdo bot yozmoqda...'}
+                  </span>
                 </div>
               )}
 
@@ -475,8 +513,8 @@ export const TelegramSimulatorModal: React.FC<TelegramSimulatorModalProps> = ({
                 ? [
                     { label: '📱 /webapp', cmd: '/webapp' },
                     { label: '📊 /statistika', cmd: '/statistika' },
-                    { label: '🔎 /search Olma', cmd: '/search Olma' },
-                    { label: '🔎 /search Shakar', cmd: '/search Shakar' },
+                    { label: language === 'uz-cyrl' ? '🔎 /search Олма' : '🔎 /search Olma', cmd: language === 'uz-cyrl' ? '/search Олма' : '/search Olma' },
+                    { label: language === 'uz-cyrl' ? '🔎 /search Шакар' : '🔎 /search Shakar', cmd: language === 'uz-cyrl' ? '/search Шакар' : '/search Shakar' },
                     { label: '📥 /excel', cmd: '/excel' },
                     { label: '📄 /pdf', cmd: '/pdf' },
                     { label: '🔒 /logout', cmd: '/logout' },
@@ -511,14 +549,18 @@ export const TelegramSimulatorModal: React.FC<TelegramSimulatorModalProps> = ({
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 className="p-2 rounded-xl text-slate-400 hover:text-emerald-400 hover:bg-slate-900 transition"
-                title="Chek rasmini yuklash"
+                title={language === 'uz-cyrl' ? 'Чек расмини юклаш' : 'Chek rasmini yuklash'}
               >
                 <Paperclip className="w-5 h-5" />
               </button>
 
               <input
                 type="text"
-                placeholder="Xabar yozing yoki /search..."
+                placeholder={
+                  language === 'uz-cyrl'
+                    ? 'Хабар ёзинг ёки /search...'
+                    : 'Xabar yozing yoki /search...'
+                }
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
                 onKeyDown={(e) => {
@@ -543,11 +585,10 @@ export const TelegramSimulatorModal: React.FC<TelegramSimulatorModalProps> = ({
             <div className="p-4 bg-slate-950/80 rounded-2xl border border-slate-800 space-y-3">
               <h4 className="text-sm font-bold text-slate-100 flex items-center gap-2">
                 <Globe className="w-4 h-4 text-emerald-400" />
-                Haqiqiy Telegram Botni Ulash (BotFather Token)
+                {t('realBotTitle')}
               </h4>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Ushbu ilovani Telegramdagi haqiqiy botingizga Webhook orqali ulashingiz mumkin.
-                Buning uchun Telegramda @BotFather orqali bot oching va API tokenini kiriting.
+                {t('realBotDesc')}
               </p>
             </div>
 
@@ -560,7 +601,7 @@ export const TelegramSimulatorModal: React.FC<TelegramSimulatorModalProps> = ({
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Telegram Bot API Token (@BotFather'dan olingan):
+                  {t('botTokenLabel')}:
                 </label>
                 <input
                   type="text"
@@ -573,7 +614,7 @@ export const TelegramSimulatorModal: React.FC<TelegramSimulatorModalProps> = ({
 
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Webhook URL (Avtomatik aniqlangan):
+                  {t('webhookUrlLabel')}:
                 </label>
                 <input
                   type="text"
@@ -588,20 +629,40 @@ export const TelegramSimulatorModal: React.FC<TelegramSimulatorModalProps> = ({
                 disabled={isSettingWebhook}
                 className="w-full py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs sm:text-sm transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 ring-1 ring-emerald-400/40 disabled:opacity-50"
               >
-                {isSettingWebhook ? 'Webhook faollashtirilmoqda...' : 'Webhookni Faollashtirish (setWebhook)'}
+                {isSettingWebhook
+                  ? language === 'uz-cyrl'
+                    ? 'Webhook фаоллаштирилмоқда...'
+                    : 'Webhook faollashtirilmoqda...'
+                  : language === 'uz-cyrl'
+                  ? 'Webhookни Фаоллаштириш (setWebhook)'
+                  : 'Webhookni Faollashtirish (setWebhook)'}
               </button>
             </div>
 
             {/* Instruction Checklist */}
             <div className="p-4 bg-slate-950/80 rounded-2xl border border-slate-800 text-xs space-y-2">
-              <span className="font-semibold text-slate-100">Botni 1 daqiqada qanday ulash mumkin?</span>
-              <ol className="list-decimal list-inside space-y-1 text-slate-400">
-                <li>Telegramda <b>@BotFather</b> ga kiring va <code>/newbot</code> yozing.</li>
-                <li>Botingizga nom va username bering.</li>
-                <li>BotFather bergan uzun <b>HTTP API Token</b> nusxasini yuqoridagi maydonga qo'ying.</li>
-                <li>"Webhookni Faollashtirish" tugmasini bosing.</li>
-                <li>Tayyor! Botingiz do'koningiz tovarlari va fakturalarini boshqarishga tayyor.</li>
-              </ol>
+              <span className="font-semibold text-slate-100">
+                {language === 'uz-cyrl'
+                  ? 'Ботни 1 дақиқада қандай улаш мумкин?'
+                  : 'Botni 1 daqiqada qanday ulash mumkin?'}
+              </span>
+              {language === 'uz-cyrl' ? (
+                <ol className="list-decimal list-inside space-y-1 text-slate-400">
+                  <li>Telegramда <b>@BotFather</b> га киринг ва <code>/newbot</code> ёзинг.</li>
+                  <li>Ботингизга ном ва username беринг.</li>
+                  <li>BotFather берган узун <b>HTTP API Token</b> нусхасини юқоридаги майдонга қўйинг.</li>
+                  <li>"Webhookни Фаоллаштириш" тугмасини босинг.</li>
+                  <li>Тайёр! Ботингиз дўконингиз товарлари ва фактураларини бошқаришга тайёр.</li>
+                </ol>
+              ) : (
+                <ol className="list-decimal list-inside space-y-1 text-slate-400">
+                  <li>Telegramda <b>@BotFather</b> ga kiring va <code>/newbot</code> yozing.</li>
+                  <li>Botingizga nom va username bering.</li>
+                  <li>BotFather bergan uzun <b>HTTP API Token</b> nusxasini yuqoridagi maydonga qo'ying.</li>
+                  <li>"Webhookni Faollashtirish" tugmasini bosing.</li>
+                  <li>Tayyor! Botingiz do'koningiz tovarlari va fakturalarini boshqarishga tayyor.</li>
+                </ol>
+              )}
             </div>
           </div>
         )}

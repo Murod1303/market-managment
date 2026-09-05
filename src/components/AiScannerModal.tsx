@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { ExtractedReceiptItem, Product, ReceiptScanResult } from '../types';
 import { formatNumber, formatSom } from '../utils/formatters';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface AiScannerModalProps {
   isOpen: boolean;
@@ -26,6 +27,7 @@ export const AiScannerModal: React.FC<AiScannerModalProps> = ({
   onClose,
   onAddExtractedProducts,
 }) => {
+  const { t, language, transUnit } = useLanguage();
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState<boolean>(false);
   const [scanResult, setScanResult] = useState<ReceiptScanResult | null>(null);
@@ -39,7 +41,11 @@ export const AiScannerModal: React.FC<AiScannerModalProps> = ({
   // Handle File Selection (Drag or Input)
   const handleFileChange = (file: File) => {
     if (!file.type.startsWith('image/')) {
-      setErrorMsg('Iltimos, faqat rasm faylini yuklang (JPG, PNG, WebP)');
+      setErrorMsg(
+        language === 'uz-cyrl'
+          ? 'Илтимос, фақат расм файлини юкланг (JPG, PNG, WebP)'
+          : 'Iltimos, faqat rasm faylini yuklang (JPG, PNG, WebP)'
+      );
       return;
     }
 
@@ -67,18 +73,30 @@ export const AiScannerModal: React.FC<AiScannerModalProps> = ({
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || `Server xatosi: ${res.status}`);
+        throw new Error(
+          errorData.error ||
+            (language === 'uz-cyrl' ? `Сервер хатоси: ${res.status}` : `Server xatosi: ${res.status}`)
+        );
       }
 
       const data = await res.json();
       if (data.result && Array.isArray(data.result.items)) {
         setScanResult(data.result);
       } else {
-        throw new Error("Rasmda tovarlar ma'lumotlari aniqlanmadi.");
+        throw new Error(
+          language === 'uz-cyrl'
+            ? 'Расмда товарлар маълумотлари аниқланмади.'
+            : "Rasmda tovarlar ma'lumotlari aniqlanmadi."
+        );
       }
     } catch (err: any) {
       console.error('Scan error:', err);
-      setErrorMsg(err.message || 'Rasm skanerlashda xatolik yuz berdi');
+      setErrorMsg(
+        err.message ||
+          (language === 'uz-cyrl'
+            ? 'Расм сканерлашда хатолик юз берди'
+            : 'Rasm skanerlashda xatolik yuz berdi')
+      );
     } finally {
       setIsScanning(false);
     }
@@ -187,9 +205,14 @@ export const AiScannerModal: React.FC<AiScannerModalProps> = ({
         unit: it.unit || 'dona',
         unitCost: cost,
         markupPercent: markupPercent,
-        supplier: scanResult.supplier || "Do'kon ombori (AI Skaner)",
+        supplier:
+          scanResult.supplier ||
+          (language === 'uz-cyrl' ? 'Дўкон омбори (AI Сканер)' : "Do'kon ombori (AI Skaner)"),
         date: scanResult.date || new Date().toISOString().split('T')[0],
-        notes: `Faktura orqali AI (Gemini Vision) bilan kiritildi. Faktura № ${scanResult.invoiceNumber || 'b/n'}`,
+        notes:
+          language === 'uz-cyrl'
+            ? `Фактура орқали AI (Gemini Vision) билан киритилди. Фактура № ${scanResult.invoiceNumber || 'б/н'}`
+            : `Faktura orqali AI (Gemini Vision) bilan kiritildi. Faktura № ${scanResult.invoiceNumber || 'b/n'}`,
       };
     });
 
@@ -211,10 +234,10 @@ export const AiScannerModal: React.FC<AiScannerModalProps> = ({
             </div>
             <div>
               <h3 className="text-base sm:text-lg font-bold text-slate-100">
-                AI Hisob-Faktura va Chek Skaneri
+                {t('scannerModalTitle')}
               </h3>
               <p className="text-xs text-slate-400">
-                Gemini Vision orqali qog'oz fakturadan tovarlar, miqdor va narxlarni ajratib olish
+                {t('scannerModalSubtitle')}
               </p>
             </div>
           </div>
@@ -243,10 +266,10 @@ export const AiScannerModal: React.FC<AiScannerModalProps> = ({
                   <Upload className="w-7 h-7" />
                 </div>
                 <h4 className="mt-3 text-sm sm:text-base font-semibold text-slate-200">
-                  Faktura yoki chek rasmini yuklang
+                  {t('uploadInvoicePrompt')}
                 </h4>
                 <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-                  Rasmni bu yerga tashlang yoki faylni tanlash uchun bosing (JPG, PNG)
+                  {t('uploadInvoiceDesc')}
                 </p>
 
                 <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
@@ -274,7 +297,7 @@ export const AiScannerModal: React.FC<AiScannerModalProps> = ({
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700/80 shadow-xs"
                   >
                     <Camera className="w-4 h-4 text-emerald-400" />
-                    <span>Kameradan rasmga olish</span>
+                    <span>{t('takePhoto')}</span>
                   </button>
                 </div>
               </div>
@@ -284,7 +307,7 @@ export const AiScannerModal: React.FC<AiScannerModalProps> = ({
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
                     <HelpCircle className="w-4 h-4 text-emerald-400" />
-                    Rasm yo'qmi? Namunaviy faktura bilan sinab ko'ring:
+                    {t('demoInvoicePrompt')}
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -294,7 +317,7 @@ export const AiScannerModal: React.FC<AiScannerModalProps> = ({
                     className="px-3 py-1.5 text-xs font-medium bg-slate-900 hover:bg-slate-800 text-slate-200 rounded-xl border border-slate-700/80 shadow-2xs transition flex items-center gap-1.5"
                   >
                     <FileText className="w-3.5 h-3.5 text-sky-400" />
-                    <span>Namunaviy Hisob-faktura (Nakladnoy)</span>
+                    <span>{t('demoInvoiceNakladnoy')}</span>
                   </button>
                   <button
                     type="button"
@@ -302,7 +325,7 @@ export const AiScannerModal: React.FC<AiScannerModalProps> = ({
                     className="px-3 py-1.5 text-xs font-medium bg-slate-900 hover:bg-slate-800 text-slate-200 rounded-xl border border-slate-700/80 shadow-2xs transition flex items-center gap-1.5"
                   >
                     <FileText className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Namunaviy Kassa Cheki</span>
+                    <span>{t('demoInvoiceChek')}</span>
                   </button>
                 </div>
               </div>
@@ -316,10 +339,10 @@ export const AiScannerModal: React.FC<AiScannerModalProps> = ({
                 <RefreshCw className="w-6 h-6" />
               </div>
               <h4 className="text-sm font-bold text-slate-100 mt-3">
-                Gemini Vision rasm tahlil qilmoqda...
+                {t('analyzingInvoice')}
               </h4>
               <p className="text-xs text-slate-400 mt-1 max-w-md mx-auto">
-                Hisob-faktura qatorlari, tovar nomlari, o'lchov birliklari va kelish narxlari aniqlanmoqda.
+                {t('analyzingInvoiceDesc')}
               </p>
             </div>
           )}
@@ -339,18 +362,18 @@ export const AiScannerModal: React.FC<AiScannerModalProps> = ({
               <div className="p-4 bg-slate-950/80 border border-slate-800 rounded-xl flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <div className="text-xs font-semibold text-emerald-400">
-                    🏢 Ta'minotchi: <span className="font-bold text-slate-200">{scanResult.supplier || 'Noma\'lum'}</span>
+                    🏢 {t('supplierFound')} <span className="font-bold text-slate-200">{scanResult.supplier || (language === 'uz-cyrl' ? 'Номаълум' : "Noma'lum")}</span>
                   </div>
                   <div className="text-xs text-slate-400 mt-0.5">
-                    📅 Faktura sanasi: {scanResult.date || 'Bugun'} | № {scanResult.invoiceNumber || 'b/n'}
+                    📅 {t('invoiceDate')} {scanResult.date || (language === 'uz-cyrl' ? 'Бугун' : 'Bugun')} | № {scanResult.invoiceNumber || (language === 'uz-cyrl' ? 'б/н' : 'b/n')}
                   </div>
                 </div>
                 <div className="text-right">
                   <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
-                    Topilgan tovarlar:
+                    {t('detectedItems')}
                   </span>
                   <div className="text-base font-bold text-emerald-400">
-                    {scanResult.items.length} ta mahsulot
+                    {scanResult.items.length} {t('itemsCount')} {language === 'uz-cyrl' ? 'маҳсулот' : 'mahsulot'}
                   </div>
                 </div>
               </div>
@@ -365,10 +388,10 @@ export const AiScannerModal: React.FC<AiScannerModalProps> = ({
                     <Percent className="w-5 h-5 text-emerald-400" />
                     <div>
                       <h4 className="text-sm font-bold text-slate-100">
-                        Ushbu tovarlar ustiga necha foiz ustama qo'ymoqchisiz?
+                        {t('askMarkupHeading')}
                       </h4>
                       <p className="text-xs text-slate-400">
-                        Har bir tovarning tavsiya etilgan sotish narxi va kutilayotgan sof foydasi avtomatik hisoblanadi.
+                        {t('askMarkupSubheading')}
                       </p>
                     </div>
                   </div>
@@ -409,15 +432,15 @@ export const AiScannerModal: React.FC<AiScannerModalProps> = ({
                   <table className="w-full text-xs text-left">
                     <thead className="bg-slate-950 text-slate-400 font-semibold sticky top-0 border-b border-slate-800">
                       <tr>
-                        <th className="p-2.5">Tovar Nomi</th>
-                        <th className="p-2.5 text-right">Miqdori</th>
-                        <th className="p-2.5 text-right">1 Birlik Tannarx</th>
-                        <th className="p-2.5 text-right">Jami Xarajat</th>
+                        <th className="p-2.5">{t('colName')}</th>
+                        <th className="p-2.5 text-right">{t('colQuantity')}</th>
+                        <th className="p-2.5 text-right">{t('colUnitCost')}</th>
+                        <th className="p-2.5 text-right">{t('colTotalCost')}</th>
                         <th className="p-2.5 text-right font-bold text-emerald-400 bg-emerald-950/30">
-                          Sotish Narxi (+{markupPercent}%)
+                          {language === 'uz-cyrl' ? 'Сотиш Нархи' : 'Sotish Narxi'} (+{markupPercent}%)
                         </th>
                         <th className="p-2.5 text-right font-bold text-teal-300 bg-teal-950/30">
-                          Kutilgan Foyda
+                          {t('colExpectedProfit')}
                         </th>
                         <th className="p-2.5 text-center w-8"></th>
                       </tr>
@@ -451,7 +474,7 @@ export const AiScannerModal: React.FC<AiScannerModalProps> = ({
                                   onChange={(e) => handleItemChange(idx, 'quantity', Number(e.target.value))}
                                   className="w-16 px-1.5 py-1 text-xs text-right border border-slate-800 rounded-lg bg-slate-950 text-slate-100 focus:outline-none"
                                 />
-                                <span className="text-slate-400 text-[11px]">{item.unit}</span>
+                                <span className="text-slate-400 text-[11px]">{transUnit(item.unit || 'dona')}</span>
                               </div>
                             </td>
                             <td className="p-2.5 text-right whitespace-nowrap font-mono">
@@ -464,20 +487,20 @@ export const AiScannerModal: React.FC<AiScannerModalProps> = ({
                               />
                             </td>
                             <td className="p-2.5 text-right font-mono font-medium text-amber-400">
-                              {formatSom(totalCost)}
+                              {formatSom(totalCost, language)}
                             </td>
                             <td className="p-2.5 text-right font-mono font-bold text-emerald-400 bg-emerald-950/20">
-                              {formatSom(sellingPrice)}
+                              {formatSom(sellingPrice, language)}
                             </td>
                             <td className="p-2.5 text-right font-mono font-bold text-teal-300 bg-teal-950/20">
-                              +{formatSom(profit)}
+                              +{formatSom(profit, language)}
                             </td>
                             <td className="p-2.5 text-center">
                               <button
                                 type="button"
                                 onClick={() => handleRemoveItem(idx)}
                                 className="text-slate-500 hover:text-rose-400 p-1 transition"
-                                title="O'chirish"
+                                title={t('delete')}
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -500,7 +523,7 @@ export const AiScannerModal: React.FC<AiScannerModalProps> = ({
                   }}
                   className="text-xs text-slate-400 hover:text-slate-200 hover:underline"
                 >
-                  Boshqa rasm yuklash
+                  {t('uploadAnotherImage')}
                 </button>
 
                 <div className="flex items-center gap-2">
@@ -509,7 +532,7 @@ export const AiScannerModal: React.FC<AiScannerModalProps> = ({
                     onClick={onClose}
                     className="px-4 py-2 text-xs sm:text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-xl transition"
                   >
-                    Bekor qilish
+                    {t('cancel')}
                   </button>
                   <button
                     type="button"
@@ -518,7 +541,7 @@ export const AiScannerModal: React.FC<AiScannerModalProps> = ({
                     className="inline-flex items-center gap-1.5 px-5 py-2 text-xs sm:text-sm font-bold text-slate-950 bg-emerald-500 hover:bg-emerald-400 rounded-xl shadow-lg shadow-emerald-500/20 ring-1 ring-emerald-400/40 transition"
                   >
                     <Check className="w-4 h-4" />
-                    <span>Umumiy jadvalga va Excelga qo'shish ({scanResult.items.length})</span>
+                    <span>{t('addToInventoryBtn')} ({scanResult.items.length})</span>
                   </button>
                 </div>
               </div>

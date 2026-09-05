@@ -13,6 +13,7 @@ import {
 import { Product } from '../types';
 import { calculateProductMetrics, formatNumber, formatSom } from '../utils/formatters';
 import { generateStorePdfReport } from '../utils/pdfGenerator';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface FinancialStatsModalProps {
   isOpen: boolean;
@@ -25,6 +26,8 @@ export const FinancialStatsModal: React.FC<FinancialStatsModalProps> = ({
   onClose,
   products,
 }) => {
+  const { t, transCategory, transUnit, language } = useLanguage();
+
   if (!isOpen) return null;
 
   // Category distribution analysis
@@ -87,7 +90,8 @@ export const FinancialStatsModal: React.FC<FinancialStatsModalProps> = ({
 
   // Handle PDF Download
   const handleDownloadPdf = () => {
-    const doc = generateStorePdfReport(products, "Markaziy Savdo Do'koni");
+    const storeName = language === 'uz-cyrl' ? "Марказий Савдо Дўкони" : "Markaziy Savdo Do'koni";
+    const doc = generateStorePdfReport(products, storeName);
     doc.save(`dokon_hisoboti_${new Date().toISOString().split('T')[0]}.pdf`);
   };
 
@@ -105,10 +109,10 @@ export const FinancialStatsModal: React.FC<FinancialStatsModalProps> = ({
             </div>
             <div>
               <h3 className="text-base sm:text-lg font-bold text-slate-100">
-                Moliyaviy Statistika va A4 PDF Hisobot
+                {t('statsModalTitle')}
               </h3>
               <p className="text-xs text-slate-400">
-                Xarajatlarning kategoriyalar kesimidagi taqsimoti va rasmiy PDF hisobot
+                {t('statsModalSubtitle')}
               </p>
             </div>
           </div>
@@ -120,7 +124,7 @@ export const FinancialStatsModal: React.FC<FinancialStatsModalProps> = ({
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/20 ring-1 ring-emerald-400/40 transition"
             >
               <Download className="w-4 h-4" />
-              <span>A4 PDF Hisobot</span>
+              <span>{t('downloadPdfBtn')}</span>
             </button>
             <button
               onClick={onClose}
@@ -136,34 +140,34 @@ export const FinancialStatsModal: React.FC<FinancialStatsModalProps> = ({
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="p-3.5 bg-slate-950/80 rounded-xl border border-slate-800">
               <span className="text-[11px] font-semibold uppercase text-slate-400 flex items-center gap-1">
-                <Wallet className="w-3.5 h-3.5 text-amber-400" /> Jami Xarajat
+                <Wallet className="w-3.5 h-3.5 text-amber-400" /> {t('totalCostLabel')}
               </span>
               <div className="text-sm sm:text-lg font-bold text-amber-400 mt-1 font-mono">
-                {formatSom(grandTotalCost)}
+                {formatSom(grandTotalCost, language)}
               </div>
             </div>
 
             <div className="p-3.5 bg-slate-950/80 rounded-xl border border-slate-800">
               <span className="text-[11px] font-semibold uppercase text-slate-400 flex items-center gap-1">
-                <DollarSign className="w-3.5 h-3.5 text-emerald-400" /> Kutilgan Savdo
+                <DollarSign className="w-3.5 h-3.5 text-emerald-400" /> {t('revenueLabel')}
               </span>
               <div className="text-sm sm:text-lg font-bold text-emerald-400 mt-1 font-mono">
-                {formatSom(grandTotalRevenue)}
+                {formatSom(grandTotalRevenue, language)}
               </div>
             </div>
 
             <div className="p-3.5 bg-slate-950/80 rounded-xl border border-slate-800">
               <span className="text-[11px] font-semibold uppercase text-slate-400 flex items-center gap-1">
-                <TrendingUp className="w-3.5 h-3.5 text-teal-400" /> Kutilgan Sof Foyda
+                <TrendingUp className="w-3.5 h-3.5 text-teal-400" /> {t('kpiExpectedProfit')}
               </span>
               <div className="text-sm sm:text-lg font-bold text-teal-300 mt-1 font-mono">
-                +{formatSom(grandTotalProfit)}
+                +{formatSom(grandTotalProfit, language)}
               </div>
             </div>
 
             <div className="p-3.5 bg-slate-950/80 rounded-xl border border-slate-800">
               <span className="text-[11px] font-semibold uppercase text-slate-400 flex items-center gap-1">
-                <Percent className="w-3.5 h-3.5 text-sky-400" /> O'rtacha Ustama
+                <Percent className="w-3.5 h-3.5 text-sky-400" /> {t('avgLabel')}
               </span>
               <div className="text-sm sm:text-lg font-bold text-sky-300 mt-1 font-mono">
                 +{avgMarkup}%
@@ -178,18 +182,18 @@ export const FinancialStatsModal: React.FC<FinancialStatsModalProps> = ({
               <div className="flex items-center justify-between">
                 <h4 className="text-sm font-bold text-slate-100 flex items-center gap-2">
                   <PieChart className="w-4 h-4 text-emerald-400" />
-                  Kategoriyalar Kesimida Xarajat
+                  {t('catDistributionTitle')}
                 </h4>
-                <span className="text-xs text-slate-400">{categoryStats.length} ta kategoriya</span>
+                <span className="text-xs text-slate-400">{categoryStats.length} {t('catLabel')}</span>
               </div>
 
               <div className="space-y-3">
                 {categoryStats.map((cat, idx) => (
                   <div key={cat.category} className="space-y-1">
                     <div className="flex items-center justify-between text-xs font-medium">
-                      <span className="text-slate-200 font-semibold">{cat.category}</span>
+                      <span className="text-slate-200 font-semibold">{transCategory(cat.category)}</span>
                       <span className="text-slate-400 font-mono">
-                        {formatSom(cat.cost)} ({cat.percent}%)
+                        {formatSom(cat.cost, language)} ({cat.percent}%)
                       </span>
                     </div>
                     {/* Visual Bar Indicator */}
@@ -221,9 +225,9 @@ export const FinancialStatsModal: React.FC<FinancialStatsModalProps> = ({
               <div className="flex items-center justify-between">
                 <h4 className="text-sm font-bold text-slate-100 flex items-center gap-2">
                   <Award className="w-4 h-4 text-amber-400" />
-                  Eng Ko'p Xarajat Sarflangan Top-5 Tovar
+                  {t('top5Title')}
                 </h4>
-                <span className="text-xs text-slate-400">Investitsiya bo'yicha</span>
+                <span className="text-xs text-slate-400">{t('byInvestment')}</span>
               </div>
 
               <div className="space-y-2.5">
@@ -247,17 +251,17 @@ export const FinancialStatsModal: React.FC<FinancialStatsModalProps> = ({
                             {prod.name}
                           </h5>
                           <span className="text-[11px] text-slate-400">
-                            {formatNumber(prod.quantity)} {prod.unit} x {formatSom(prod.unitCost)}
+                            {formatNumber(prod.quantity)} {transUnit(prod.unit)} x {formatSom(prod.unitCost, language)}
                           </span>
                         </div>
                       </div>
 
                       <div className="text-right shrink-0">
                         <div className="text-xs font-extrabold text-slate-100 font-mono">
-                          {formatSom(prod.calculatedTotalCost)}
+                          {formatSom(prod.calculatedTotalCost, language)}
                         </div>
                         <span className="text-[10px] text-emerald-400 font-semibold">
-                          {percentOfTotal}% xarajat
+                          {percentOfTotal}% {language === 'uz-cyrl' ? 'харажат' : 'xarajat'}
                         </span>
                       </div>
                     </div>
@@ -275,10 +279,10 @@ export const FinancialStatsModal: React.FC<FinancialStatsModalProps> = ({
               </div>
               <div>
                 <h4 className="text-sm font-bold text-slate-100">
-                  Rasmiy A4 Formatidagi Chop Etish Hisoboti
+                  {t('officialPdfTitle')}
                 </h4>
                 <p className="text-xs text-slate-400">
-                  Kompaniya bosh hisobchisi va do'kon rahbari imzosi, tovarlar jadvallari va moliyaviy xulosa
+                  {t('officialPdfDesc')}
                 </p>
               </div>
             </div>
@@ -289,7 +293,7 @@ export const FinancialStatsModal: React.FC<FinancialStatsModalProps> = ({
               className="w-full sm:w-auto px-5 py-2.5 text-xs font-bold rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/20 ring-1 ring-emerald-400/40 transition flex items-center justify-center gap-2 shrink-0"
             >
               <Download className="w-4 h-4" />
-              <span>PDF Hisobotni Yuklab Olish</span>
+              <span>{t('downloadPdfFullBtn')}</span>
             </button>
           </div>
         </div>

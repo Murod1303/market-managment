@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { X, FileSpreadsheet, Download, Upload, Check, AlertCircle, RefreshCw } from 'lucide-react';
 import { Product } from '../types';
 import { exportProductsToExcel, parseExcelFile } from '../utils/excelManager';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface ExcelManagerModalProps {
   isOpen: boolean;
@@ -16,6 +17,7 @@ export const ExcelManagerModal: React.FC<ExcelManagerModalProps> = ({
   products,
   onImportProducts,
 }) => {
+  const { t, language } = useLanguage();
   const [isImporting, setIsImporting] = useState(false);
   const [importSuccessMsg, setImportSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -41,14 +43,27 @@ export const ExcelManagerModal: React.FC<ExcelManagerModalProps> = ({
     try {
       const parsedItems = await parseExcelFile(file);
       if (parsedItems.length === 0) {
-        throw new Error("Excel faylida tovarlar topilmadi yoki jadval bo'sh.");
+        throw new Error(
+          language === 'uz-cyrl'
+            ? 'Excel файлида товарлар топилмади ёки жадвал бўш.'
+            : "Excel faylida tovarlar topilmadi yoki jadval bo'sh."
+        );
       }
 
       onImportProducts(parsedItems);
-      setImportSuccessMsg(`✅ ${parsedItems.length} ta tovar muvaffaqiyatli bazaga qo'shildi!`);
+      setImportSuccessMsg(
+        language === 'uz-cyrl'
+          ? `✅ ${parsedItems.length} та товар муваффақиятли базага қўшилди!`
+          : `✅ ${parsedItems.length} ta tovar muvaffaqiyatli bazaga qo'shildi!`
+      );
     } catch (err: any) {
       console.error('Excel import error:', err);
-      setErrorMsg(err.message || 'Excel faylni o\'qishda xatolik yuz berdi');
+      setErrorMsg(
+        err.message ||
+          (language === 'uz-cyrl'
+            ? "Excel файлни ўқишда хатолик юз берди"
+            : "Excel faylni o'qishda xatolik yuz berdi")
+      );
     } finally {
       setIsImporting(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -68,9 +83,9 @@ export const ExcelManagerModal: React.FC<ExcelManagerModalProps> = ({
               <FileSpreadsheet className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base sm:text-lg font-bold text-slate-100">Excel (.xlsx) Bilan Integratsiya</h3>
+              <h3 className="text-base sm:text-lg font-bold text-slate-100">{t('excelModalTitle')}</h3>
               <p className="text-xs text-slate-400">
-                Barcha tovarlarni yuklab olish yoki mavjud Excel jadvalni import qilish
+                {t('excelModalSubtitle')}
               </p>
             </div>
           </div>
@@ -103,10 +118,12 @@ export const ExcelManagerModal: React.FC<ExcelManagerModalProps> = ({
             <div className="flex items-start justify-between">
               <div>
                 <h4 className="text-sm font-bold text-slate-100">
-                  1. Tovarlar Jadvalini Excelga Yuklab Olish
+                  1. {t('exportExcelTitle')}
                 </h4>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Barcha {products.length} ta tovar, miqdor, tannarx, ustama, sotish narxi va foydalar formulalari bilan
+                  {language === 'uz-cyrl'
+                    ? `Барча ${products.length} та товар, миқдор, таннарх, устама, сотиш нархи ва фойдалар формулалари билан`
+                    : `Barcha ${products.length} ta tovar, miqdor, tannarx, ustama, sotish narxi va foydalar formulalari bilan`}
                 </p>
               </div>
             </div>
@@ -117,7 +134,7 @@ export const ExcelManagerModal: React.FC<ExcelManagerModalProps> = ({
               className="w-full py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition shadow-lg shadow-emerald-500/20 ring-1 ring-emerald-400/40"
             >
               <Download className="w-4 h-4" />
-              <span>Excel (.xlsx) Faylni Yuklab Olish</span>
+              <span>{t('exportExcelBtn')}</span>
             </button>
           </div>
 
@@ -125,10 +142,10 @@ export const ExcelManagerModal: React.FC<ExcelManagerModalProps> = ({
           <div className="p-4 rounded-xl border border-slate-800 bg-slate-950/70 space-y-3">
             <div>
               <h4 className="text-sm font-bold text-slate-100">
-                2. Excel Faylni Bazaga Import Qilish
+                2. {t('importExcelTitle')}
               </h4>
               <p className="text-xs text-slate-400 mt-0.5">
-                Mavjud Excel jadvalingizni yuklang. Tizim ustunlarni avtomatik aniqlaydi va bazaga qo'shadi.
+                {t('importExcelDesc')}
               </p>
             </div>
 
@@ -149,12 +166,12 @@ export const ExcelManagerModal: React.FC<ExcelManagerModalProps> = ({
               {isImporting ? (
                 <>
                   <RefreshCw className="w-4 h-4 animate-spin text-emerald-400" />
-                  <span>Excel fayli o'qilmoqda...</span>
+                  <span>{t('readingExcel')}</span>
                 </>
               ) : (
                 <>
                   <Upload className="w-4 h-4 text-emerald-400" />
-                  <span>Mavjud Excel (.xlsx) Faylni Tanlash</span>
+                  <span>{t('importExcelBtn')}</span>
                 </>
               )}
             </button>
@@ -167,7 +184,7 @@ export const ExcelManagerModal: React.FC<ExcelManagerModalProps> = ({
             onClick={onClose}
             className="px-4 py-2 text-xs sm:text-sm font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-xl transition"
           >
-            Yopish
+            {t('close')}
           </button>
         </div>
       </div>
