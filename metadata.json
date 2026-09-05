@@ -1,0 +1,6 @@
+{
+  "name": "Do'kon Tovar va Hisob-Kitob Boshqaruvi",
+  "description": "Do'kon tovarlari, kelgan hisob-fakturalar (nakladnoy/chek) va xarajatlarni avtomatik hisoblash, AI Gemini Vision skaneri, Excel/PDF hisobotlar va Telegram Bot tizimi",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
