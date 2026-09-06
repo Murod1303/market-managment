@@ -1363,261 +1363,58 @@ app.post('/api/telegram/chat', async (req: Request, res: Response) => {
   }
 });
 
-// 9. Real Telegram Webhook Registration
-app.post('/api/telegram/set-webhook', async (req: Request, res: Response) => {
-  const { botToken, webhookUrl } = req.body;
-  if (!botToken) {
-    res.status(400).json({ error: 'Telegram Bot Token talab qilinadi' });
-    return;
+// -------------------------------------------------------------
+// TELEGRAM BOT CORE & UPDATE PROCESSING
+// -------------------------------------------------------------
+function getPublicAppUrl(): string | undefined {
+  if (process.env.APP_URL && process.env.APP_URL.trim()) {
+    const u = process.env.APP_URL.trim();
+    return u.startsWith('http') ? u.replace(/\/$/, '') : `https://${u}`;
   }
-
-  try {
-    const url = `https://api.telegram.org/bot${botToken}/setWebhook`;
-    const targetUrl = webhookUrl || `${process.env.APP_URL || 'http://localhost:3000'}/api/telegram/webhook`;
-
-    const fetchResponse = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: targetUrl }),
-    });
-
-    const data = await fetchResponse.json();
-    res.json(data);
-  } catch (err: any) {
-    res.status(500).json({ error: 'Webhook o\'rnatishda xatolik: ' + err.message });
+  if (process.env.RAILWAY_PUBLIC_DOMAIN && process.env.RAILWAY_PUBLIC_DOMAIN.trim()) {
+    const d = process.env.RAILWAY_PUBLIC_DOMAIN.trim();
+    return `https://${d.replace(/\/$/, '')}`;
   }
-});
+  if (process.env.RAILWAY_STATIC_URL && process.env.RAILWAY_STATIC_URL.trim()) {
+    const s = process.env.RAILWAY_STATIC_URL.trim();
+    return s.startsWith('http') ? s.replace(/\/$/, '') : `https://${s}`;
+  }
+  return undefined;
+}
 
-// 10. Real Telegram Webhook Receiver
-app.post('/api/telegram/webhook', async (req: Request, res: Response) => {
-  // Acknowledge quickly to Telegram
-  res.status(200).send('OK');
+let runtimeBotToken = process.env.TELEGRAM_BOT_TOKEN || '';
+let pollingActive = false;
+let pollingAbortController: AbortController | null = null;
+let currentBotMode: 'webhook' | 'polling' | 'idle' = 'idle';
+let currentBotUser: any = null;
+let lastTelegramError: string | null = null;
 
-  try {
-    const update = req.body;
-    const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    if (!botToken || !update) return;
+async function processTelegramUpdate(update: any, botToken: string): Promise<void> {
+  if (!update || !botToken) return;
 
-    // A. Handle inline keyboard callback queries (e.g. markup selection)
-    if (update.callback_query) {
-      const cb = update.callback_query;
-      const cbChatId = cb.message?.chat?.id || cb.from?.id;
-      const cbKey = String(cbChatId);
-      const data = String(cb.data || '');
+  // A. Handle inline keyboard callback queries (e.g. markup selection)
+  if (update.callback_query) {
+    const cb = update.callback_query;
+    const cbChatId = cb.message?.chat?.id || cb.from?.id;
+    const cbKey = String(cbChatId);
+    const data = String(cb.data || '');
 
-      // Answer callback query so Telegram loading indicator stops
-      try {
-        await fetch(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ callback_query_id: cb.id }),
-        });
-      } catch (cbErr) {
-        console.error('Error answering callback query:', cbErr);
-      }
-
-      if (data.startsWith('markup_')) {
-        const percent = parseFloat(data.replace('markup_', '')) || 20;
-        const pending = pendingMarkupSessions.get(cbKey);
-
-        if (pending && pending.items.length > 0) {
-          const supplierName = pending.userName ? `${pending.userName} (Telegram)` : (pending.supplier || "Telegram Bot");
-          const { addedProducts, totalCost, totalRevenue, expectedProfit } = applyMarkupToProducts(
-            pending.items,
-            percent,
-            supplierName,
-            pending.date
-          );
-          pendingMarkupSessions.delete(cbKey);
-
-          const itemsList = addedProducts
-            .map(
-              (p, i) =>
-                `${i + 1}. <b>${p.name}</b>: ${p.quantity} ${p.unit} (tannarx: ${formatSom(p.unitCost)} -> sotish: <b>${formatSom(Math.round(p.unitCost * (1 + p.markupPercent / 100)))}</b>)`
-            )
-            .join('\n');
-
-          await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              chat_id: cbChatId,
-              text: `✅ <b>Tovarlar muvaffaqiyatli saqlandi!</b>\n\n` +
-                `📦 <b>${addedProducts.length} ta tovar</b> +${percent}% ustama bilan bazaga kiritildi:\n\n${itemsList}\n\n` +
-                `💰 Jami partiya tannarxi: <b>${formatSom(totalCost)}</b>\n` +
-                `📈 Kutilayotgan tushum: <b>${formatSom(totalRevenue)}</b>\n` +
-                `💎 Kutilayotgan sof foyda: <b>+${formatSom(expectedProfit)}</b>\n\n` +
-                `💡 <i>Tovarlar do'kon bazasiga kiritildi va saytda aks etadi!</i>`,
-              parse_mode: 'HTML',
-            }),
-          });
-          return;
-        } else {
-          await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              chat_id: cbChatId,
-              text: `⚠️ Kutilayotgan tovarlar topilmadi yoki allaqachon saqlangan. Yangi tovar qo'shish uchun /new yoki rasm yuboring.`,
-              parse_mode: 'HTML',
-            }),
-          });
-          return;
-        }
-      }
-      return;
-    }
-
-    // B. Handle regular messages
-    const message = update?.message;
-    if (!message) return;
-
-    const chatId = message.chat?.id;
-    if (!chatId) return;
-
-    const chatKey = String(chatId);
-    let session = telegramAuthSessions.get(chatKey);
-
-    // C. Photo upload handling in Telegram
-    if (message.photo && message.photo.length > 0) {
-      if (!session) {
-        await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chat_id: chatId,
-            text: `🔒 <b>Ruxsat etilmadi!</b>\nChek yoki tovar rasmini yuklashdan oldin tizimga kiring:\n👉 <code>/login [login] [parol]</code>\n\nMisol: /login admin admin123`,
-            parse_mode: 'HTML',
-          }),
-        });
-        return;
-      }
-
-      // Send typing action
-      await fetch(`https://api.telegram.org/bot${botToken}/sendChatAction`, {
+    // Answer callback query so Telegram loading indicator stops
+    try {
+      await fetch(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: chatId, action: 'typing' }),
+        body: JSON.stringify({ callback_query_id: cb.id }),
       });
-
-      try {
-        const photo = message.photo[message.photo.length - 1];
-        const fileRes = await fetch(`https://api.telegram.org/bot${botToken}/getFile?file_id=${photo.file_id}`);
-        const fileJson = await fileRes.json();
-        const filePath = fileJson?.result?.file_path;
-
-        let base64 = '';
-        if (filePath) {
-          const imgRes = await fetch(`https://api.telegram.org/file/bot${botToken}/${filePath}`);
-          const arrayBuffer = await imgRes.arrayBuffer();
-          base64 = Buffer.from(arrayBuffer).toString('base64');
-        }
-
-        const scanResult = await scanReceiptImage(base64);
-
-        pendingMarkupSessions.set(chatKey, {
-          items: scanResult.items,
-          supplier: scanResult.supplier,
-          date: scanResult.date,
-          userName: session.user.name,
-          timestamp: Date.now(),
-        });
-
-        const itemsSummary = scanResult.items
-          .map(
-            (it: any, idx: number) =>
-              `${idx + 1}. <b>${it.name}</b>: ${it.quantity} ${it.unit} x ${formatSom(it.unitCost)} = ${formatSom(it.quantity * it.unitCost)}`
-          )
-          .join('\n');
-
-        await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chat_id: chatId,
-            text: `🧾 <b>Tovar / hisob-faktura rasmi qabul qilindi!</b>\n\n` +
-              `🏢 Ta'minotchi: <i>${scanResult.supplier || 'Noma\'lum'}</i>\n` +
-              `📅 Sana: <i>${scanResult.date || 'Bugun'}</i>\n\n` +
-              `<b>Aniqlangan tovarlar:</b>\n${itemsSummary}\n\n` +
-              `❓ <b>Ushbu tovarlar ustiga necha foiz ustama qo'ymoqchisiz?</b>\n` +
-              `Quyidagi tugmalardan birini tanlang yoki o'z foizingizni yozing (masalan: <code>25</code> yoki <code>30%</code>):`,
-            parse_mode: 'HTML',
-            reply_markup: {
-              inline_keyboard: [
-                [
-                  { text: '+15% ustama', callback_data: 'markup_15' },
-                  { text: '+20% ustama', callback_data: 'markup_20' },
-                ],
-                [
-                  { text: '+25% ustama', callback_data: 'markup_25' },
-                  { text: '+30% ustama', callback_data: 'markup_30' },
-                ],
-              ],
-            },
-          }),
-        });
-        return;
-      } catch (photoErr) {
-        console.error('Photo processing error in telegram webhook:', photoErr);
-        await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chat_id: chatId,
-            text: `⚠️ Rasmni o'qishda xatolik yuz berdi. Iltimos qaytadan yuboring yoki /new buyrug'idan foydalaning.`,
-            parse_mode: 'HTML',
-          }),
-        });
-        return;
-      }
+    } catch (cbErr) {
+      console.error('Error answering callback query:', cbErr);
     }
 
-    // D. Text message handling
-    const text = (message.text || '').trim();
-    let responseText = '';
-    const loginMatch = text.match(/^\/login(?:\s+([^\s]+)\s+([^\s]+))?$/i);
+    if (data.startsWith('markup_')) {
+      const percent = parseFloat(data.replace('markup_', '')) || 20;
+      const pending = pendingMarkupSessions.get(cbKey);
 
-    if (loginMatch) {
-      const u = loginMatch[1]?.trim().toLowerCase();
-      const p = loginMatch[2]?.trim();
-      const matched = usersCache.find(
-        (usr) => usr.username.toLowerCase() === u && usr.password === p
-      );
-
-      if (matched) {
-        const token = generateToken(matched.id);
-        activeTokens.set(token, {
-          user: matched,
-          expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
-        });
-        telegramAuthSessions.set(chatKey, {
-          user: matched,
-          token,
-          loginAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        });
-
-        const appUrl = process.env.APP_URL || 'https://aistudio.google.com';
-        responseText = `✅ <b>Avtorizatsiya muvaffaqiyatli!</b>\n\nXush kelibsiz, <b>${matched.name}</b> (${matched.roleTitle})!\n\n📱 <b>SmartSavdo WebApp:</b>\n<a href="${appUrl}?auth_token=${token}">Do'kon WebApp Ilovasini Ochish</a>\n\nEndi buyruqlar faol:\n➕ /new [nomi] [miqdor] [birlik] [tannarx] [ustama]\n📸 Chek yoki tovar rasmini yuboring\n🔎 /search [nomi]\n📊 /statistika\n📑 /excel\n🔒 /logout`;
-      } else {
-        responseText = `❌ <b>Login yoki parol noto'g'ri!</b>\nQaytadan kiriting: /login [login] [parol]\nMasalan: /login admin admin123`;
-      }
-    } else if (text === '/logout') {
-      if (session) {
-        activeTokens.delete(session.token);
-        telegramAuthSessions.delete(chatKey);
-        pendingMarkupSessions.delete(chatKey);
-      }
-      responseText = `🔒 <b>Tizimdan chiqildi.</b>\nQayta kirish: /login [login] [parol]`;
-    } else if (!session) {
-      // Not logged in
-      responseText = `🔒 <b>SmartSavdo Xavfsizlik Tizimi:</b>\nDo'kon ma'lumotlarini ko'rish uchun avval avtorizatsiyadan o'ting:\n\n👉 <code>/login [login] [parol]</code>\n\nMisol:\n• /login admin admin123\n• /login kassir kassa2026`;
-    } else {
-      // Check if user is replying with a markup percentage for pending photo
-      const isMarkupInput = /^(\+?\s*\d{1,3}\s*%?|ustama\s*\d{1,3}\s*%?)$/i.test(text) || (!isNaN(parseFloat(text.replace(/[+%\s]/g, ''))) && parseFloat(text.replace(/[+%\s]/g, '')) <= 500 && !text.startsWith('/'));
-      const pending = pendingMarkupSessions.get(chatKey);
-
-      if (isMarkupInput && pending && pending.items.length > 0) {
-        const percent = parseFloat(text.replace(/[^\d.]/g, '')) || 20;
+      if (pending && pending.items.length > 0) {
         const supplierName = pending.userName ? `${pending.userName} (Telegram)` : (pending.supplier || "Telegram Bot");
         const { addedProducts, totalCost, totalRevenue, expectedProfit } = applyMarkupToProducts(
           pending.items,
@@ -1625,7 +1422,7 @@ app.post('/api/telegram/webhook', async (req: Request, res: Response) => {
           supplierName,
           pending.date
         );
-        pendingMarkupSessions.delete(chatKey);
+        pendingMarkupSessions.delete(cbKey);
 
         const itemsList = addedProducts
           .map(
@@ -1634,80 +1431,499 @@ app.post('/api/telegram/webhook', async (req: Request, res: Response) => {
           )
           .join('\n');
 
-        responseText = `✅ <b>Tovarlar muvaffaqiyatli saqlandi!</b>\n\n` +
-          `📦 <b>${addedProducts.length} ta tovar</b> +${percent}% ustama bilan bazaga kiritildi:\n\n${itemsList}\n\n` +
-          `💰 Jami partiya tannarxi: <b>${formatSom(totalCost)}</b>\n` +
-          `📈 Kutilayotgan tushum: <b>${formatSom(totalRevenue)}</b>\n` +
-          `💎 Kutilayotgan sof foyda: <b>+${formatSom(expectedProfit)}</b>\n\n` +
-          `💡 <i>Tovarlar do'kon bazasiga kiritildi va saytda aks etadi!</i>`;
-      } else if (text.startsWith('/start')) {
-        responseText = `Assalomu alaykum, <b>${session.user.name}</b>!\nSmartSavdo do'kon botiga xush kelibsiz!\n\nBuyruqlar:\n➕ /new [nomi] [miqdor] [birlik] [tannarx] [ustama] - yangi tovar qo'shish\n📸 Chek yoki tovar rasmini yuboring - AI avtomat taniydi\n🔎 /search [nomi] - tovar qidirish\n📊 /statistika - kassa va sof foyda\n📑 /excel - Excel hisobot\n🔒 /logout - chiqish`;
-      } else if (text.startsWith('/new') || text.startsWith('/yangi')) {
-        const param = text.replace(/^\/(new|yangi)\s*/i, '').trim();
-        const parsed = parseNewProductInput(param);
-
-        if (!parsed.success) {
-          if (parsed.error === 'empty') {
-            responseText = `➕ <b>Yangi tovar qo'shish (/new buyrug'i)</b>\n\nFormat:\n<code>/new [Nomi] [Miqdori] [Birligi] [Tannarxi] [Ustama%]</code>\n\n📌 <b>Misollar:</b>\n• <code>/new Olma 50 kg 12000 25</code>\n• <code>/new Shakar 100 kg 9500 20</code>\n• <code>/new Coca-Cola 1.5L 24 dona 14000 15</code>\n• <code>/new O'simlik yog'i 30 litr 16500 20</code>\n\n💡 <i>Ustama foizini yozmasangiz, avtomatik 20% hisoblanadi. Vergul bilan ham yozishingiz mumkin:\n<code>/new Non, 100 dona, 3500, 15%</code>\n\nYoki to'g'ridan-to'g'ri chek/tovar rasmini yuboring!</i>`;
-          } else {
-            responseText = `⚠️ <b>Tovar ma'lumotlari to'liq kiritilmadi.</b>\n\nIltimos, quyidagi tartibda yozing:\n<code>/new [Nomi] [Miqdori] [Birligi] [Tannarxi] [Ustama%]</code>\n\nMisol:\n<code>/new Olma 50 kg 12000 25</code>\nyoki\n<code>/new Non, 100 dona, 3500 so'm, 15%</code>`;
-          }
-        } else {
-          const it = parsed.item!;
-          const newProduct = {
-            id: `prod-bot-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-            name: it.name,
-            category: it.category,
-            quantity: it.quantity,
-            unit: it.unit,
-            unitCost: it.unitCost,
-            markupPercent: it.markupPercent,
-            date: new Date().toISOString().split('T')[0],
-            supplier: session ? `${session.user.name} (Telegram)` : "Telegram Bot orqali",
-            notes: "Telegram /new buyrug'i orqali kiritildi",
-          };
-
-          productsCache.unshift(newProduct);
-          saveProducts(productsCache);
-
-          const unitPrice = Math.round(newProduct.unitCost * (1 + newProduct.markupPercent / 100));
-          const totalCost = newProduct.quantity * newProduct.unitCost;
-          const totalRevenue = newProduct.quantity * unitPrice;
-          const expectedProfit = totalRevenue - totalCost;
-
-          responseText = `✅ <b>Yangi tovar muvaffaqiyatli qo'shildi!</b>\n\n` +
-            `📦 <b>${newProduct.name}</b> (${newProduct.category})\n` +
-            `• Miqdori: <b>${newProduct.quantity} ${newProduct.unit}</b>\n` +
-            `• Keltirilgan tannarxi: <b>${formatSom(newProduct.unitCost)}</b> / ${newProduct.unit}\n` +
-            `• Belgilangan ustama: <b>+${newProduct.markupPercent}%</b>\n` +
-            `• Sotish tavsiya narxi: <b>${formatSom(unitPrice)}</b> / ${newProduct.unit}\n` +
-            `• Jami partiya xarajati: <b>${formatSom(totalCost)}</b>\n` +
-            `• Kutilayotgan sof foyda: <b>+${formatSom(expectedProfit)}</b>\n` +
-            `• Ta'minotchi: <i>${newProduct.supplier}</i> (${newProduct.date})\n\n` +
-            `💡 <i>Tovar do'kon bazasiga saqlandi va veb-saytda darhol aks etadi!</i>`;
-        }
-      } else if (text.startsWith('/search')) {
-        const q = text.replace('/search', '').trim().toLowerCase();
-        const match = productsCache.find((p) => p.name.toLowerCase().includes(q));
-        if (match) {
-          responseText = `📦 <b>${match.name}</b> (${match.category})\nMiqdor: ${match.quantity} ${match.unit}\nTannarx: ${formatSom(match.unitCost)}\nSotish narxi: ${formatSom(match.unitCost * (1 + match.markupPercent / 100))}\nUstama: +${match.markupPercent}%\nTa'minotchi: ${match.supplier}`;
-        } else {
-          responseText = `"${q}" bo'yicha tovar topilmadi.`;
-        }
-      } else if (text.startsWith('/statistika')) {
-        const totalCost = productsCache.reduce((sum, p) => sum + p.quantity * p.unitCost, 0);
-        const totalRev = productsCache.reduce((sum, p) => sum + p.quantity * (p.unitCost * (1 + p.markupPercent / 100)), 0);
-        responseText = `📊 <b>Do'kon Balansi:</b>\n💰 Tannarx: ${formatSom(totalCost)}\n📈 Tushum: ${formatSom(totalRev)}\n💎 Sof Foyda: ${formatSom(totalRev - totalCost)}\n📦 Tovar turlari: ${productsCache.length} xil`;
+        await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: cbChatId,
+            text: `✅ <b>Tovarlar muvaffaqiyatli saqlandi!</b>\n\n` +
+              `📦 <b>${addedProducts.length} ta tovar</b> +${percent}% ustama bilan bazaga kiritildi:\n\n${itemsList}\n\n` +
+              `💰 Jami partiya tannarxi: <b>${formatSom(totalCost)}</b>\n` +
+              `📈 Kutilayotgan tushum: <b>${formatSom(totalRevenue)}</b>\n` +
+              `💎 Kutilayotgan sof foyda: <b>+${formatSom(expectedProfit)}</b>\n\n` +
+              `💡 <i>Tovarlar do'kon bazasiga kiritildi va saytda aks etadi!</i>`,
+            parse_mode: 'HTML',
+          }),
+        });
+        return;
       } else {
-        responseText = `Xush kelibsiz! Buyruqlar:\n➕ /new [nomi] [miqdor] [birlik] [tannarx] [ustama]\n📸 Chek rasmini yuboring\n🔎 /search [tovar]\n📊 /statistika\n🔒 /logout`;
+        await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: cbChatId,
+            text: `⚠️ Kutilayotgan tovarlar topilmadi yoki allaqachon saqlangan. Yangi tovar qo'shish uchun /new yoki rasm yuboring.`,
+            parse_mode: 'HTML',
+          }),
+        });
+        return;
       }
     }
+    return;
+  }
 
+  // B. Handle regular messages
+  const message = update?.message;
+  if (!message) return;
+
+  const chatId = message.chat?.id;
+  if (!chatId) return;
+
+  const chatKey = String(chatId);
+  let session = telegramAuthSessions.get(chatKey);
+
+  // C. Photo upload handling in Telegram
+  if (message.photo && message.photo.length > 0) {
+    if (!session) {
+      await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: `🔒 <b>Ruxsat etilmadi!</b>\nChek yoki tovar rasmini yuklashdan oldin tizimga kiring:\n👉 <code>/login [login] [parol]</code>\n\nMisol: /login admin admin123`,
+          parse_mode: 'HTML',
+        }),
+      });
+      return;
+    }
+
+    // Send typing action
+    await fetch(`https://api.telegram.org/bot${botToken}/sendChatAction`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, action: 'typing' }),
+    });
+
+    try {
+      const photo = message.photo[message.photo.length - 1];
+      const fileRes = await fetch(`https://api.telegram.org/bot${botToken}/getFile?file_id=${photo.file_id}`);
+      const fileJson = await fileRes.json();
+      const filePath = fileJson?.result?.file_path;
+
+      let base64 = '';
+      if (filePath) {
+        const imgRes = await fetch(`https://api.telegram.org/file/bot${botToken}/${filePath}`);
+        const arrayBuffer = await imgRes.arrayBuffer();
+        base64 = Buffer.from(arrayBuffer).toString('base64');
+      }
+
+      const scanResult = await scanReceiptImage(base64);
+
+      pendingMarkupSessions.set(chatKey, {
+        items: scanResult.items,
+        supplier: scanResult.supplier,
+        date: scanResult.date,
+        userName: session.user.name,
+        timestamp: Date.now(),
+      });
+
+      const itemsSummary = scanResult.items
+        .map(
+          (it: any, idx: number) =>
+            `${idx + 1}. <b>${it.name}</b>: ${it.quantity} ${it.unit} x ${formatSom(it.unitCost)} = ${formatSom(it.quantity * it.unitCost)}`
+        )
+        .join('\n');
+
+      await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: `🧾 <b>Tovar / hisob-faktura rasmi qabul qilindi!</b>\n\n` +
+            `🏢 Ta'minotchi: <i>${scanResult.supplier || 'Noma\'lum'}</i>\n` +
+            `📅 Sana: <i>${scanResult.date || 'Bugun'}</i>\n\n` +
+            `<b>Aniqlangan tovarlar:</b>\n${itemsSummary}\n\n` +
+            `❓ <b>Ushbu tovarlar ustiga necha foiz ustama qo'ymoqchisiz?</b>\n` +
+            `Quyidagi tugmalardan birini tanlang yoki o'z foizingizni yozing (masalan: <code>25</code> yoki <code>30%</code>):`,
+          parse_mode: 'HTML',
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: '+15% ustama', callback_data: 'markup_15' },
+                { text: '+20% ustama', callback_data: 'markup_20' },
+              ],
+              [
+                { text: '+25% ustama', callback_data: 'markup_25' },
+                { text: '+30% ustama', callback_data: 'markup_30' },
+              ],
+            ],
+          },
+        }),
+      });
+      return;
+    } catch (photoErr) {
+      console.error('Photo processing error in telegram bot:', photoErr);
+      await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: `⚠️ Rasmni o'qishda xatolik yuz berdi. Iltimos qaytadan yuboring yoki /new buyrug'idan foydalaning.`,
+          parse_mode: 'HTML',
+        }),
+      });
+      return;
+    }
+  }
+
+  // D. Text message handling
+  const text = (message.text || '').trim();
+  let responseText = '';
+  const loginMatch = text.match(/^\/login(?:\s+([^\s]+)\s+([^\s]+))?$/i);
+
+  if (loginMatch) {
+    const u = loginMatch[1]?.trim().toLowerCase();
+    const p = loginMatch[2]?.trim();
+    const matched = usersCache.find(
+      (usr) => usr.username.toLowerCase() === u && usr.password === p
+    );
+
+    if (matched) {
+      const token = generateToken(matched.id);
+      activeTokens.set(token, {
+        user: matched,
+        expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+      });
+      telegramAuthSessions.set(chatKey, {
+        user: matched,
+        token,
+        loginAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      });
+
+      const appUrl = getPublicAppUrl() || 'https://aistudio.google.com';
+      responseText = `✅ <b>Avtorizatsiya muvaffaqiyatli!</b>\n\nXush kelibsiz, <b>${matched.name}</b> (${matched.roleTitle})!\n\n📱 <b>SmartSavdo WebApp:</b>\n<a href="${appUrl}?auth_token=${token}">Do'kon WebApp Ilovasini Ochish</a>\n\nEndi buyruqlar faol:\n➕ /new [nomi] [miqdor] [birlik] [tannarx] [ustama]\n📸 Chek yoki tovar rasmini yuboring\n🔎 /search [nomi]\n📊 /statistika\n📑 /excel\n🔒 /logout`;
+    } else {
+      responseText = `❌ <b>Login yoki parol noto'g'ri!</b>\nQaytadan kiriting: /login [login] [parol]\nMasalan: /login admin admin123`;
+    }
+  } else if (text === '/logout') {
+    if (session) {
+      activeTokens.delete(session.token);
+      telegramAuthSessions.delete(chatKey);
+      pendingMarkupSessions.delete(chatKey);
+    }
+    responseText = `🔒 <b>Tizimdan chiqildi.</b>\nQayta kirish: /login [login] [parol]`;
+  } else if (!session) {
+    // Not logged in
+    responseText = `🔒 <b>SmartSavdo Xavfsizlik Tizimi:</b>\nDo'kon ma'lumotlarini ko'rish uchun avval avtorizatsiyadan o'ting:\n\n👉 <code>/login [login] [parol]</code>\n\nMisol:\n• <code>/login admin admin123</code> (Admin)\n• <code>/login kassir kassa2026</code> (Kassir)`;
+  } else {
+    // Check if user is replying with a markup percentage for pending photo
+    const isMarkupInput = /^(\+?\s*\d{1,3}\s*%?|ustama\s*\d{1,3}\s*%?)$/i.test(text) || (!isNaN(parseFloat(text.replace(/[+%\s]/g, ''))) && parseFloat(text.replace(/[+%\s]/g, '')) <= 500 && !text.startsWith('/'));
+    const pending = pendingMarkupSessions.get(chatKey);
+
+    if (isMarkupInput && pending && pending.items.length > 0) {
+      const percent = parseFloat(text.replace(/[^\d.]/g, '')) || 20;
+      const supplierName = pending.userName ? `${pending.userName} (Telegram)` : (pending.supplier || "Telegram Bot");
+      const { addedProducts, totalCost, totalRevenue, expectedProfit } = applyMarkupToProducts(
+        pending.items,
+        percent,
+        supplierName,
+        pending.date
+      );
+      pendingMarkupSessions.delete(chatKey);
+
+      const itemsList = addedProducts
+        .map(
+          (p, i) =>
+            `${i + 1}. <b>${p.name}</b>: ${p.quantity} ${p.unit} (tannarx: ${formatSom(p.unitCost)} -> sotish: <b>${formatSom(Math.round(p.unitCost * (1 + p.markupPercent / 100)))}</b>)`
+        )
+        .join('\n');
+
+      responseText = `✅ <b>Tovarlar muvaffaqiyatli saqlandi!</b>\n\n` +
+        `📦 <b>${addedProducts.length} ta tovar</b> +${percent}% ustama bilan bazaga kiritildi:\n\n${itemsList}\n\n` +
+        `💰 Jami partiya tannarxi: <b>${formatSom(totalCost)}</b>\n` +
+        `📈 Kutilayotgan tushum: <b>${formatSom(totalRevenue)}</b>\n` +
+        `💎 Kutilayotgan sof foyda: <b>+${formatSom(expectedProfit)}</b>\n\n` +
+        `💡 <i>Tovarlar do'kon bazasiga kiritildi va saytda aks etadi!</i>`;
+    } else if (text.startsWith('/start')) {
+      responseText = `Assalomu alaykum, <b>${session.user.name}</b>!\nSmartSavdo do'kon botiga xush kelibsiz!\n\nBuyruqlar:\n➕ /new [nomi] [miqdor] [birlik] [tannarx] [ustama] - yangi tovar qo'shish\n📸 Chek yoki tovar rasmini yuboring - AI avtomat taniydi\n🔎 /search [nomi] - tovar qidirish\n📊 /statistika - kassa va sof foyda\n📑 /excel - Excel hisobot\n📱 /webapp - WebApp ilovasini ochish\n🔒 /logout - chiqish`;
+    } else if (text.startsWith('/new') || text.startsWith('/yangi')) {
+      const param = text.replace(/^\/(new|yangi)\s*/i, '').trim();
+      const parsed = parseNewProductInput(param);
+
+      if (!parsed.success) {
+        if (parsed.error === 'empty') {
+          responseText = `➕ <b>Yangi tovar qo'shish (/new buyrug'i)</b>\n\nFormat:\n<code>/new [Nomi] [Miqdori] [Birligi] [Tannarxi] [Ustama%]</code>\n\n📌 <b>Misollar:</b>\n• <code>/new Olma 50 kg 12000 25</code>\n• <code>/new Shakar 100 kg 9500 20</code>\n• <code>/new Coca-Cola 1.5L 24 dona 14000 15</code>\n• <code>/new O'simlik yog'i 30 litr 16500 20</code>\n\n💡 <i>Ustama foizini yozmasangiz, avtomatik 20% hisoblanadi. Vergul bilan ham yozishingiz mumkin:\n<code>/new Non, 100 dona, 3500, 15%</code>\n\nYoki to'g'ridan-to'g'ri chek/tovar rasmini yuboring!</i>`;
+        } else {
+          responseText = `⚠️ <b>Tovar ma'lumotlari to'liq kiritilmadi.</b>\n\nIltimos, quyidagi tartibda yozing:\n<code>/new [Nomi] [Miqdori] [Birligi] [Tannarxi] [Ustama%]</code>\n\nMisol:\n<code>/new Olma 50 kg 12000 25</code>\nyoki\n<code>/new Non, 100 dona, 3500 so'm, 15%</code>`;
+        }
+      } else {
+        const it = parsed.item!;
+        const newProduct = {
+          id: `prod-bot-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          name: it.name,
+          category: it.category,
+          quantity: it.quantity,
+          unit: it.unit,
+          unitCost: it.unitCost,
+          markupPercent: it.markupPercent,
+          date: new Date().toISOString().split('T')[0],
+          supplier: session ? `${session.user.name} (Telegram)` : "Telegram Bot orqali",
+          notes: "Telegram /new buyrug'i orqali kiritildi",
+        };
+
+        productsCache.unshift(newProduct);
+        saveProducts(productsCache);
+
+        const unitPrice = Math.round(newProduct.unitCost * (1 + newProduct.markupPercent / 100));
+        const totalCost = newProduct.quantity * newProduct.unitCost;
+        const totalRevenue = newProduct.quantity * unitPrice;
+        const expectedProfit = totalRevenue - totalCost;
+
+        responseText = `✅ <b>Yangi tovar muvaffaqiyatli qo'shildi!</b>\n\n` +
+          `📦 <b>${newProduct.name}</b> (${newProduct.category})\n` +
+          `• Miqdori: <b>${newProduct.quantity} ${newProduct.unit}</b>\n` +
+          `• Keltirilgan tannarxi: <b>${formatSom(newProduct.unitCost)}</b> / ${newProduct.unit}\n` +
+          `• Belgilangan ustama: <b>+${newProduct.markupPercent}%</b>\n` +
+          `• Sotish tavsiya narxi: <b>${formatSom(unitPrice)}</b> / ${newProduct.unit}\n` +
+          `• Jami partiya xarajati: <b>${formatSom(totalCost)}</b>\n` +
+          `• Kutilayotgan sof foyda: <b>+${formatSom(expectedProfit)}</b>\n` +
+          `• Ta'minotchi: <i>${newProduct.supplier}</i> (${newProduct.date})\n\n` +
+          `💡 <i>Tovar do'kon bazasiga saqlandi va veb-saytda darhol aks etadi!</i>`;
+      }
+    } else if (text.startsWith('/search')) {
+      const q = text.replace('/search', '').trim().toLowerCase();
+      const match = productsCache.find((p) => p.name.toLowerCase().includes(q));
+      if (match) {
+        responseText = `📦 <b>${match.name}</b> (${match.category})\nMiqdor: ${match.quantity} ${match.unit}\nTannarx: ${formatSom(match.unitCost)}\nSotish narxi: ${formatSom(match.unitCost * (1 + match.markupPercent / 100))}\nUstama: +${match.markupPercent}%\nTa'minotchi: ${match.supplier}`;
+      } else {
+        responseText = `"${q}" bo'yicha tovar topilmadi.`;
+      }
+    } else if (text.startsWith('/statistika')) {
+      const totalCost = productsCache.reduce((sum, p) => sum + p.quantity * p.unitCost, 0);
+      const totalRev = productsCache.reduce((sum, p) => sum + p.quantity * (p.unitCost * (1 + p.markupPercent / 100)), 0);
+      responseText = `📊 <b>Do'kon Balansi:</b>\n💰 Tannarx: ${formatSom(totalCost)}\n📈 Tushum: ${formatSom(totalRev)}\n💎 Sof Foyda: ${formatSom(totalRev - totalCost)}\n📦 Tovar turlari: ${productsCache.length} xil`;
+    } else if (text.startsWith('/webapp')) {
+      const appUrl = getPublicAppUrl() || 'https://aistudio.google.com';
+      responseText = `📱 <b>SmartSavdo WebApp:</b>\n\nQuyidagi havola orqali do'koningizni to'liq boshqaring:\n<a href="${appUrl}?auth_token=${session.token}">👉 SmartSavdo WebApp Ilovasini Ochish</a>`;
+    } else if (text.startsWith('/excel')) {
+      const appUrl = getPublicAppUrl() || 'https://aistudio.google.com';
+      responseText = `📑 <b>Do'kon tovarlari Excel hisoboti:</b>\n\nJami tovarlar soni: ${productsCache.length} xil.\nExcel va PDF fayllarni to'liq yuklab olish uchun WebApp ilovasiga kiring:\n<a href="${appUrl}">SmartSavdo Tizimi</a>`;
+    } else {
+      responseText = `Xush kelibsiz! Buyruqlar:\n➕ /new [nomi] [miqdor] [birlik] [tannarx] [ustama]\n📸 Chek rasmini yuboring\n🔎 /search [tovar]\n📊 /statistika\n📱 /webapp\n🔒 /logout`;
+    }
+  }
+
+  try {
     await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chat_id: chatId, text: responseText, parse_mode: 'HTML' }),
     });
+  } catch (sendErr) {
+    console.error('Failed to send Telegram message:', sendErr);
+  }
+}
+
+// Long Polling Engine
+async function startTelegramPolling(token: string) {
+  if (pollingActive) return;
+  pollingActive = true;
+  currentBotMode = 'polling';
+  pollingAbortController = new AbortController();
+  console.log('[Telegram Bot] Starting Long Polling mode (works anywhere without public domain)...');
+
+  let offset = 0;
+  while (pollingActive) {
+    try {
+      const response = await fetch(
+        `https://api.telegram.org/bot${token}/getUpdates?offset=${offset}&timeout=20`,
+        { signal: pollingAbortController.signal }
+      );
+      const data = await response.json();
+
+      if (data.ok && Array.isArray(data.result)) {
+        for (const update of data.result) {
+          offset = update.update_id + 1;
+          await processTelegramUpdate(update, token).catch((err) => {
+            console.error('[Telegram Polling Update Error]:', err);
+          });
+        }
+      } else if (!data.ok) {
+        lastTelegramError = data.description || 'Telegram API Error';
+        console.warn('[Telegram Polling Warning]:', data.description);
+
+        // If webhook conflict, delete webhook
+        if (data.description && data.description.includes('webhook is active')) {
+          console.log('[Telegram Bot] Webhook conflict detected, deleting webhook to switch to polling...');
+          await fetch(`https://api.telegram.org/bot${token}/deleteWebhook`);
+        }
+        await new Promise((r) => setTimeout(r, 4000));
+      }
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        break;
+      }
+      console.error('[Telegram Polling Exception]:', err.message);
+      await new Promise((r) => setTimeout(r, 4000));
+    }
+  }
+  pollingActive = false;
+  if (currentBotMode === 'polling') {
+    currentBotMode = 'idle';
+  }
+  console.log('[Telegram Bot] Long Polling stopped.');
+}
+
+function stopTelegramPolling() {
+  pollingActive = false;
+  if (pollingAbortController) {
+    pollingAbortController.abort();
+    pollingAbortController = null;
+  }
+}
+
+// 9. Real Telegram Bot Status & Diagnostics Endpoint
+app.get('/api/telegram/status', async (req: Request, res: Response) => {
+  const token = runtimeBotToken || process.env.TELEGRAM_BOT_TOKEN;
+  const detectedUrl = getPublicAppUrl();
+
+  if (!token) {
+    res.json({
+      configured: false,
+      mode: 'idle',
+      message: "TELEGRAM_BOT_TOKEN o'rnatilmagan",
+      detectedAppUrl: detectedUrl,
+      railwayDomain: process.env.RAILWAY_PUBLIC_DOMAIN || null,
+    });
+    return;
+  }
+
+  try {
+    const meRes = await fetch(`https://api.telegram.org/bot${token}/getMe`);
+    const meData = await meRes.json();
+
+    const whRes = await fetch(`https://api.telegram.org/bot${token}/getWebhookInfo`);
+    const whData = await whRes.json();
+
+    const mode = pollingActive ? 'polling' : (whData?.result?.url ? 'webhook' : 'idle');
+    if (meData.ok) {
+      currentBotUser = meData.result;
+    }
+
+    res.json({
+      configured: meData.ok,
+      botUser: meData.ok ? meData.result : null,
+      error: meData.ok ? null : meData.description,
+      mode,
+      webhookInfo: whData?.result || null,
+      detectedAppUrl: detectedUrl,
+      railwayDomain: process.env.RAILWAY_PUBLIC_DOMAIN || null,
+      tokenMasked: token.length > 10 ? token.substring(0, 6) + '...' + token.slice(-4) : '***',
+      lastTelegramError,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 10. Switch Mode Endpoint (Webhook <-> Polling)
+app.post('/api/telegram/set-mode', async (req: Request, res: Response) => {
+  const { token, mode, webhookUrl } = req.body;
+  const activeToken = (token || runtimeBotToken || process.env.TELEGRAM_BOT_TOKEN || '').trim();
+
+  if (!activeToken) {
+    res.status(400).json({ error: 'Telegram Bot Token talab qilinadi' });
+    return;
+  }
+
+  runtimeBotToken = activeToken;
+
+  try {
+    if (mode === 'polling') {
+      // 1. Delete Webhook from Telegram
+      const delRes = await fetch(`https://api.telegram.org/bot${activeToken}/deleteWebhook`);
+      const delData = await delRes.json();
+
+      // 2. Start Long Polling loop
+      stopTelegramPolling();
+      startTelegramPolling(activeToken);
+
+      res.json({
+        ok: true,
+        mode: 'polling',
+        message: 'Telegram Bot Long Polling rejimida muvaffaqiyatli ishga tushirildi! Webhook va ommaviy domen talab qilinmaydi.',
+        details: delData,
+      });
+      return;
+    } else if (mode === 'webhook') {
+      stopTelegramPolling();
+
+      const detectedUrl = getPublicAppUrl();
+      const target = webhookUrl || (detectedUrl ? `${detectedUrl}/api/telegram/webhook` : '');
+
+      if (!target || !target.startsWith('https://')) {
+        res.status(400).json({
+          error: 'Webhook uchun to\'g\'ri HTTPS domen talab qilinadi (masalan: https://myapp.up.railway.app/api/telegram/webhook). Agar domeningiz bo\'lmasa, "Long Polling" rejimini tanlang.',
+        });
+        return;
+      }
+
+      const setRes = await fetch(`https://api.telegram.org/bot${activeToken}/setWebhook`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: target }),
+      });
+      const setData = await setRes.json();
+      currentBotMode = 'webhook';
+
+      res.json({
+        ok: setData.ok,
+        mode: 'webhook',
+        message: setData.ok ? `Webhook muvaffaqiyatli ${target} ga ulandi!` : `Telegram xatoligi: ${setData.description}`,
+        details: setData,
+      });
+      return;
+    } else {
+      res.status(400).json({ error: 'Noto\'g\'ri rejim (polling yoki webhook kutiladi)' });
+    }
+  } catch (err: any) {
+    res.status(500).json({ error: 'Xatolik: ' + err.message });
+  }
+});
+
+// 11. Real Telegram Webhook Registration (Backwards Compatibility)
+app.post('/api/telegram/set-webhook', async (req: Request, res: Response) => {
+  const { botToken, webhookUrl } = req.body;
+  const activeToken = (botToken || runtimeBotToken || process.env.TELEGRAM_BOT_TOKEN || '').trim();
+
+  if (!activeToken) {
+    res.status(400).json({ error: 'Telegram Bot Token talab qilinadi' });
+    return;
+  }
+
+  runtimeBotToken = activeToken;
+
+  try {
+    const detectedUrl = getPublicAppUrl();
+    const targetUrl = webhookUrl || (detectedUrl ? `${detectedUrl}/api/telegram/webhook` : `${process.env.APP_URL || 'http://localhost:3000'}/api/telegram/webhook`);
+
+    const fetchResponse = await fetch(`https://api.telegram.org/bot${activeToken}/setWebhook`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: targetUrl }),
+    });
+
+    const data = await fetchResponse.json();
+    if (data.ok) {
+      stopTelegramPolling();
+      currentBotMode = 'webhook';
+    }
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Webhook o\'rnatishda xatolik: ' + err.message });
+  }
+});
+
+// 12. Real Telegram Webhook Receiver
+app.post('/api/telegram/webhook', async (req: Request, res: Response) => {
+  // Acknowledge quickly to Telegram
+  res.status(200).send('OK');
+
+  const botToken = runtimeBotToken || process.env.TELEGRAM_BOT_TOKEN;
+  if (!botToken || !req.body) return;
+
+  try {
+    await processTelegramUpdate(req.body, botToken);
   } catch (err) {
     console.error('Telegram webhook processing error:', err);
   }
@@ -1734,27 +1950,56 @@ async function startServer() {
   app.listen(PORT, '0.0.0.0', async () => {
     console.log(`Server running on http://0.0.0.0:${PORT}`);
 
-    // Auto-register Telegram webhook if bot token and domain are provided in environment
-    const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    const appUrl = process.env.APP_URL || process.env.RAILWAY_PUBLIC_DOMAIN
-      ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
-      : undefined;
-
-    if (botToken && appUrl) {
+    // Intelligent Telegram Bot Initialization
+    const botToken = runtimeBotToken || process.env.TELEGRAM_BOT_TOKEN;
+    if (botToken) {
       try {
-        const cleanBaseUrl = appUrl.startsWith('http') ? appUrl.replace(/\/$/, '') : `https://${appUrl}`;
-        const webhookUrl = `${cleanBaseUrl}/api/telegram/webhook`;
-        console.log(`Setting Telegram webhook to: ${webhookUrl}`);
-        const response = await fetch(`https://api.telegram.org/bot${botToken}/setWebhook`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: webhookUrl }),
-        });
-        const result = await response.json();
-        console.log('Telegram Webhook Setup Result:', result);
-      } catch (webhookErr) {
-        console.error('Failed to auto-configure Telegram webhook:', webhookErr);
+        const meRes = await fetch(`https://api.telegram.org/bot${botToken}/getMe`);
+        const meData = await meRes.json();
+
+        if (meData.ok) {
+          currentBotUser = meData.result;
+          console.log(`[Telegram Bot] Connected as @${meData.result.username} (${meData.result.first_name})`);
+
+          const whRes = await fetch(`https://api.telegram.org/bot${botToken}/getWebhookInfo`);
+          const whData = await whRes.json();
+          const currentWhUrl = whData?.result?.url || '';
+
+          const detectedUrl = getPublicAppUrl();
+          const preferPolling = process.env.TELEGRAM_BOT_MODE === 'polling' || !detectedUrl;
+
+          if (preferPolling) {
+            console.log('[Telegram Bot] Starting in Long Polling mode (100% reliable on Railway without domain)...');
+            await fetch(`https://api.telegram.org/bot${botToken}/deleteWebhook`);
+            startTelegramPolling(botToken);
+          } else {
+            const targetWebhook = `${detectedUrl}/api/telegram/webhook`;
+            console.log(`[Telegram Bot] Configuring webhook to: ${targetWebhook}`);
+            const setResponse = await fetch(`https://api.telegram.org/bot${botToken}/setWebhook`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ url: targetWebhook }),
+            });
+            const setResult = await setResponse.json();
+            console.log('[Telegram Bot] Webhook Setup Result:', setResult);
+
+            if (!setResult.ok) {
+              console.warn('[Telegram Bot] Webhook failed, falling back to Long Polling...');
+              await fetch(`https://api.telegram.org/bot${botToken}/deleteWebhook`);
+              startTelegramPolling(botToken);
+            } else {
+              currentBotMode = 'webhook';
+            }
+          }
+        } else {
+          console.warn('[Telegram Bot] TELEGRAM_BOT_TOKEN is invalid:', meData.description);
+          lastTelegramError = meData.description;
+        }
+      } catch (tgErr) {
+        console.error('[Telegram Bot] Startup initialization error:', tgErr);
       }
+    } else {
+      console.log('[Telegram Bot] TELEGRAM_BOT_TOKEN not provided in environment variables.');
     }
   });
 }

@@ -19,6 +19,10 @@ import {
   Smartphone,
   LogOut,
   Camera,
+  Zap,
+  RefreshCw,
+  AlertTriangle,
+  CheckCircle2,
 } from 'lucide-react';
 import { Product, TelegramMessage, AuthUser } from '../types';
 import { exportProductsToExcel } from '../utils/excelManager';
@@ -75,11 +79,69 @@ export const TelegramSimulatorModal: React.FC<TelegramSimulatorModalProps> = ({
   const [isBotTyping, setIsBotTyping] = useState(false);
   const [pendingMarkupItems, setPendingMarkupItems] = useState<any[] | null>(null);
 
-  // Webhook setup states
+  // Webhook & Polling setup states
   const [botToken, setBotToken] = useState('');
   const [webhookUrl, setWebhookUrl] = useState('');
   const [webhookStatus, setWebhookStatus] = useState<string | null>(null);
   const [isSettingWebhook, setIsSettingWebhook] = useState(false);
+  const [botLiveInfo, setBotLiveInfo] = useState<{
+    configured: boolean;
+    mode: 'polling' | 'webhook' | 'idle';
+    botUser?: { username: string; first_name: string; id: number };
+    error?: string;
+    webhookInfo?: any;
+    detectedAppUrl?: string;
+    railwayDomain?: string;
+    tokenMasked?: string;
+    lastTelegramError?: string;
+  } | null>(null);
+  const [isLoadingStatus, setIsLoadingStatus] = useState(false);
+
+  const fetchBotStatus = async () => {
+    setIsLoadingStatus(true);
+    try {
+      const res = await fetch('/api/telegram/status');
+      const data = await res.json();
+      setBotLiveInfo(data);
+    } catch (err) {
+      console.error('Failed to fetch bot status:', err);
+    } finally {
+      setIsLoadingStatus(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'setup') {
+      fetchBotStatus();
+    }
+  }, [activeTab]);
+
+  const handleSetMode = async (mode: 'polling' | 'webhook') => {
+    setIsSettingWebhook(true);
+    setWebhookStatus(null);
+    try {
+      const res = await fetch('/api/telegram/set-mode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: botToken.trim() || undefined,
+          mode,
+          webhookUrl: webhookUrl.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setWebhookStatus(`✅ ${data.message}`);
+        await fetchBotStatus();
+      } else {
+        setWebhookStatus(`❌ ${data.error || 'Xatolik yuz berdi'}`);
+      }
+    } catch (err: any) {
+      setWebhookStatus(`❌ Xatolik: ${err.message}`);
+    } finally {
+      setIsSettingWebhook(false);
+    }
+  };
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -634,20 +696,98 @@ export const TelegramSimulatorModal: React.FC<TelegramSimulatorModalProps> = ({
             </div>
           </div>
         ) : (
-          /* Tab 2: Real BotFather Token & Webhook Setup */
+          /* Tab 2: Real BotFather Token & Webhook / Polling Setup */
           <div className="flex-1 p-6 bg-slate-950/60 text-slate-200 overflow-y-auto space-y-5">
-            <div className="p-4 bg-slate-950/80 rounded-2xl border border-slate-800 space-y-3">
-              <h4 className="text-sm font-bold text-slate-100 flex items-center gap-2">
-                <Globe className="w-4 h-4 text-emerald-400" />
-                {t('realBotTitle')}
-              </h4>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                {t('realBotDesc')}
-              </p>
+            {/* Live Bot Diagnostics Card */}
+            <div className="p-4 bg-slate-900/90 rounded-2xl border border-slate-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+                  <Bot className="w-4 h-4 text-emerald-400" />
+                  {language === 'uz-cyrl' ? 'Ҳақиқий Telegram Бот Ҳолати' : 'Haqiqiy Telegram Bot Holati'}
+                </h4>
+                <button
+                  onClick={fetchBotStatus}
+                  disabled={isLoadingStatus}
+                  className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition flex items-center gap-1 text-xs"
+                  title="Statusni yangilash"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isLoadingStatus ? 'animate-spin text-emerald-400' : ''}`} />
+                  <span className="hidden sm:inline">{language === 'uz-cyrl' ? 'Янгилаш' : 'Yangilash'}</span>
+                </button>
+              </div>
+
+              {botLiveInfo?.configured && botLiveInfo.botUser ? (
+                <div className="p-3 bg-emerald-950/40 border border-emerald-500/30 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                      <span className="text-xs font-bold text-emerald-300">
+                        @{botLiveInfo.botUser.username} ({botLiveInfo.botUser.first_name})
+                      </span>
+                    </div>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-mono border border-emerald-500/30">
+                      {botLiveInfo.mode === 'polling' ? '⚡ Long Polling' : '🌐 Webhook'}
+                    </span>
+                  </div>
+
+                  <div className="text-[11px] text-slate-300 space-y-1 pt-1 border-t border-emerald-900/40 font-mono">
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Rejim:</span>
+                      <span className="text-emerald-400 font-semibold">
+                        {botLiveInfo.mode === 'polling'
+                          ? '⚡ Long Polling (100% kafolatlangan)'
+                          : '🌐 Webhook faol'}
+                      </span>
+                    </div>
+                    {botLiveInfo.tokenMasked && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Token:</span>
+                        <span className="text-slate-200">{botLiveInfo.tokenMasked}</span>
+                      </div>
+                    )}
+                    {botLiveInfo.webhookInfo?.url && (
+                      <div className="flex justify-between overflow-hidden text-ellipsis">
+                        <span className="text-slate-400">Webhook URL:</span>
+                        <span className="text-slate-300 truncate max-w-[200px]" title={botLiveInfo.webhookInfo.url}>
+                          {botLiveInfo.webhookInfo.url}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {botLiveInfo.webhookInfo?.last_error_message && botLiveInfo.mode === 'webhook' && (
+                    <div className="mt-2 p-2 bg-rose-950/60 border border-rose-800/60 rounded-lg text-[11px] text-rose-300 flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                      <div>
+                        <b>Telegram Webhook xatosi:</b> {botLiveInfo.webhookInfo.last_error_message}
+                        <div className="text-[10px] text-rose-200 mt-1">
+                          👉 Quyidagi <b>"⚡ Long Polling rejimiga o'tkazish"</b> tugmasini bosing, bot darhol ishlashni boshlaydi!
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="p-3 bg-amber-950/30 border border-amber-500/30 rounded-xl text-xs text-amber-300 space-y-1">
+                  <div className="flex items-center gap-2 font-semibold">
+                    <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span>
+                      {language === 'uz-cyrl'
+                        ? 'Telegram Bot токени топилмади ёки ҳали уланмаган'
+                        : "Telegram Bot tokeni topilmadi yoki hali ulanmagan"}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-amber-200/80">
+                    {language === 'uz-cyrl'
+                      ? 'Railway variables да TELEGRAM_BOT_TOKEN киритилганлигини текширинг ёки қуйидаги майдонга токенни қўйинг.'
+                      : "Railway variables da TELEGRAM_BOT_TOKEN kiritilganligini tekshiring yoki quyidagi maydonga tokenni qo'ying."}
+                  </p>
+                </div>
+              )}
             </div>
 
             {webhookStatus && (
-              <div className="p-3 bg-slate-950/80 border border-emerald-500/40 rounded-xl text-xs text-emerald-300">
+              <div className="p-3 bg-slate-900 border border-emerald-500/40 rounded-xl text-xs text-emerald-300">
                 {webhookStatus}
               </div>
             )}
@@ -655,7 +795,7 @@ export const TelegramSimulatorModal: React.FC<TelegramSimulatorModalProps> = ({
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  {t('botTokenLabel')}:
+                  {t('botTokenLabel')} (@BotFather dan olingan token):
                 </label>
                 <input
                   type="text"
@@ -666,57 +806,63 @@ export const TelegramSimulatorModal: React.FC<TelegramSimulatorModalProps> = ({
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  {t('webhookUrlLabel')}:
-                </label>
-                <input
-                  type="text"
-                  readOnly
-                  value={webhookUrl}
-                  className="w-full px-3 py-2.5 text-xs sm:text-sm rounded-xl bg-slate-900 border border-slate-800 text-slate-400 font-mono select-all"
-                />
+              {/* Action Buttons: Polling vs Webhook */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  onClick={() => handleSetMode('polling')}
+                  disabled={isSettingWebhook}
+                  className="py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 disabled:opacity-50"
+                >
+                  <Zap className="w-4 h-4 text-amber-300" />
+                  {isSettingWebhook
+                    ? 'Yuklanmoqda...'
+                    : language === 'uz-cyrl'
+                    ? '⚡ Long Polling (Тавсия этилади)'
+                    : '⚡ Long Polling (100% Kafolatli)'}
+                </button>
+
+                <button
+                  onClick={() => handleSetMode('webhook')}
+                  disabled={isSettingWebhook}
+                  className="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs transition flex items-center justify-center gap-2 border border-slate-700 disabled:opacity-50"
+                >
+                  <Globe className="w-4 h-4 text-sky-400" />
+                  {isSettingWebhook
+                    ? 'Yuklanmoqda...'
+                    : language === 'uz-cyrl'
+                    ? '🌐 Webhook улаш'
+                    : '🌐 Webhook rejimida ulash'}
+                </button>
               </div>
 
-              <button
-                onClick={handleSetRealWebhook}
-                disabled={isSettingWebhook}
-                className="w-full py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs sm:text-sm transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 ring-1 ring-emerald-400/40 disabled:opacity-50"
-              >
-                {isSettingWebhook
-                  ? language === 'uz-cyrl'
-                    ? 'Webhook фаоллаштирилмоқда...'
-                    : 'Webhook faollashtirilmoqda...'
-                  : language === 'uz-cyrl'
-                  ? 'Webhookни Фаоллаштириш (setWebhook)'
-                  : 'Webhookni Faollashtirish (setWebhook)'}
-              </button>
+              <p className="text-[11px] text-slate-400 leading-normal">
+                💡 <b>Nima uchun Long Polling?</b> Railway'da ommaviy domen sozlanmagan bo'lsa ham yoki Telegramdan xabarlar yetib kelmayotgan bo'lsa, <b>Long Polling</b> rejimida server to'g'ridan-to'g'ri Telegramdan xabarlarni oladi va 100% ishlaydi!
+              </p>
             </div>
 
-            {/* Instruction Checklist */}
-            <div className="p-4 bg-slate-950/80 rounded-2xl border border-slate-800 text-xs space-y-2">
-              <span className="font-semibold text-slate-100">
-                {language === 'uz-cyrl'
-                  ? 'Ботни 1 дақиқада қандай улаш мумкин?'
-                  : 'Botni 1 daqiqada qanday ulash mumkin?'}
-              </span>
-              {language === 'uz-cyrl' ? (
-                <ol className="list-decimal list-inside space-y-1 text-slate-400">
-                  <li>Telegramда <b>@BotFather</b> га киринг ва <code>/newbot</code> ёзинг.</li>
-                  <li>Ботингизга ном ва username беринг.</li>
-                  <li>BotFather берган узун <b>HTTP API Token</b> нусхасини юқоридаги майдонга қўйинг.</li>
-                  <li>"Webhookни Фаоллаштириш" тугмасини босинг.</li>
-                  <li>Тайёр! Ботингиз дўконингиз товарлари ва фактураларини бошқаришга тайёр.</li>
-                </ol>
-              ) : (
-                <ol className="list-decimal list-inside space-y-1 text-slate-400">
-                  <li>Telegramda <b>@BotFather</b> ga kiring va <code>/newbot</code> yozing.</li>
-                  <li>Botingizga nom va username bering.</li>
-                  <li>BotFather bergan uzun <b>HTTP API Token</b> nusxasini yuqoridagi maydonga qo'ying.</li>
-                  <li>"Webhookni Faollashtirish" tugmasini bosing.</li>
-                  <li>Tayyor! Botingiz do'koningiz tovarlari va fakturalarini boshqarishga tayyor.</li>
-                </ol>
-              )}
+            {/* Railway Guide */}
+            <div className="p-4 bg-slate-900/80 rounded-2xl border border-slate-800 text-xs space-y-3">
+              <div className="flex items-center gap-2 text-slate-100 font-semibold">
+                <Smartphone className="w-4 h-4 text-emerald-400" />
+                <span>Railway.com da Telegram Botni ishga tushirish (2 qadam):</span>
+              </div>
+              <ol className="list-decimal list-inside space-y-2 text-slate-300 text-[11px] leading-relaxed">
+                <li>
+                  <b>Railway.com</b> loyihangizga kiring va <b>"Variables"</b> bo'limini oching.
+                </li>
+                <li>
+                  Quyidagi o'zgaruvchini qo'shing:
+                  <div className="mt-1 p-2 bg-slate-950 rounded-lg font-mono text-emerald-400 border border-slate-800">
+                    TELEGRAM_BOT_TOKEN = @BotFather_bergan_token
+                  </div>
+                </li>
+                <li>
+                  (Ixtiyoriy) <code>TELEGRAM_BOT_MODE</code> = <code>polling</code> qilib qo'yishingiz mumkin.
+                </li>
+                <li>
+                  Railway loyihangiz <b>Deploy</b> bo'lgach, Telegramda botingizga kiring va <code>/start</code> yoki <code>/login admin admin123</code> yozing. Bot darhol javob beradi!
+                </li>
+              </ol>
             </div>
           </div>
         )}
