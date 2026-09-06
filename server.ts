@@ -267,6 +267,194 @@ function formatSom(amount: number): string {
   return Math.round(amount).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + " so'm";
 }
 
+interface ParsedProductResult {
+  success: boolean;
+  error?: 'empty' | 'invalid';
+  item?: {
+    name: string;
+    quantity: number;
+    unit: string;
+    unitCost: number;
+    markupPercent: number;
+    category: string;
+    supplier: string;
+  };
+}
+
+// Helper: Parse /new command input
+function parseNewProductInput(raw: string): ParsedProductResult {
+  const text = raw.trim();
+  if (!text || text.toLowerCase() === 'help' || text.toLowerCase() === 'yordam') {
+    return { success: false, error: 'empty' };
+  }
+
+  // Known units list in Latin and Cyrillic
+  const knownUnits = [
+    'kg', 'dona', 'litr', 'l', 'qop', 'quti', 'metr', 'm', 'pachka', 'blok', 'ta', 'shtuk', 'sh',
+    'кг', 'дона', 'литр', 'қоп', 'қути', 'метр', 'пачка', 'блок', 'штук'
+  ];
+
+  let name = '';
+  let quantity = 0;
+  let unit = 'dona';
+  let unitCost = 0;
+  let markupPercent = 20; // default 20%
+  let category = 'Umumiy';
+  let supplier = "Do'kon ombori";
+
+  // Check if multi-line key-value format (e.g. Nomi: ..., Miqdori: ...)
+  if (text.includes('\n') && (text.toLowerCase().includes('nomi:') || text.toLowerCase().includes('tovar:'))) {
+    const lines = text.split('\n');
+    for (const line of lines) {
+      const lower = line.toLowerCase().trim();
+      if (lower.startsWith('nomi:') || lower.startsWith('tovar:')) {
+        name = line.split(':')[1]?.trim() || '';
+      } else if (lower.startsWith('miqdor:') || lower.startsWith('miqdori:')) {
+        const val = line.split(':')[1]?.trim() || '';
+        const match = val.match(/([\d\.]+)\s*([a-zA-Zа-яА-ЯўқғҳЎҚҒҲ']+)?/);
+        if (match) {
+          quantity = parseFloat(match[1]) || 0;
+          if (match[2]) unit = match[2].toLowerCase();
+        }
+      } else if (lower.startsWith('birligi:') || lower.startsWith('birlik:')) {
+        unit = line.split(':')[1]?.trim().toLowerCase() || unit;
+      } else if (lower.startsWith('tannarx:') || lower.startsWith('tannarxi:') || lower.startsWith('narx:')) {
+        const val = line.split(':')[1]?.replace(/[^\d\.]/g, '') || '';
+        unitCost = parseFloat(val) || 0;
+      } else if (lower.startsWith('ustama:') || lower.startsWith('foiz:')) {
+        const val = line.split(':')[1]?.replace(/[^\d\.]/g, '') || '';
+        markupPercent = parseFloat(val) || 20;
+      } else if (lower.startsWith("ta'minotchi:") || lower.startsWith('taminotchi:')) {
+        supplier = line.split(':')[1]?.trim() || supplier;
+      }
+    }
+  } else if (text.includes(',') || text.includes('|') || text.includes(';')) {
+    // Delimiter separated: name, quantity, [unit], unitCost, [markup]
+    const parts = text.split(/[,|;]+/).map((p) => p.trim()).filter(Boolean);
+    if (parts.length >= 2) {
+      name = parts[0];
+      // Part 1: quantity and maybe unit (e.g. "50 kg" or "50")
+      const p1 = parts[1];
+      const qMatch = p1.match(/([\d\.]+)\s*([a-zA-Zа-яА-ЯўқғҳЎҚҒҲ']+)?/);
+      if (qMatch) {
+        quantity = parseFloat(qMatch[1]) || 0;
+        if (qMatch[2]) unit = qMatch[2].toLowerCase();
+      }
+
+      let costPartIndex = 2;
+      // If Part 2 is just a unit (like "kg" or "dona")
+      if (parts[2] && isNaN(parseFloat(parts[2].replace(/[^\d\.]/g, '')))) {
+        unit = parts[2].toLowerCase();
+        costPartIndex = 3;
+      }
+
+      if (parts[costPartIndex]) {
+        unitCost = parseFloat(parts[costPartIndex].replace(/[^\d\.]/g, '')) || 0;
+      }
+
+      const markupPartIndex = costPartIndex + 1;
+      if (parts[markupPartIndex]) {
+        const parsedMarkup = parseFloat(parts[markupPartIndex].replace(/[^\d\.]/g, ''));
+        if (!isNaN(parsedMarkup)) {
+          markupPercent = parsedMarkup;
+        }
+      }
+    }
+  } else {
+    // Space separated: e.g. "Olma 50 kg 12000 25" or "Qizil olma 50 kg 12000 25"
+    const tokens = text.split(/\s+/).filter(Boolean);
+    if (tokens.length >= 3) {
+      let endIdx = tokens.length - 1;
+
+      // Check if last token is markup (e.g. "25" or "25%")
+      const lastTokenClean = tokens[endIdx].replace('%', '');
+      const lastTokenNum = parseFloat(lastTokenClean);
+
+      if (tokens[endIdx].includes('%') || (tokens.length >= 5 && !isNaN(lastTokenNum) && lastTokenNum <= 300)) {
+        markupPercent = lastTokenNum;
+        endIdx--;
+      }
+
+      // Next from end should be unitCost
+      if (endIdx >= 2) {
+        const costClean = tokens[endIdx].replace(/[^\d\.]/g, '');
+        const costNum = parseFloat(costClean);
+        if (!isNaN(costNum) && costNum > 0) {
+          unitCost = costNum;
+          endIdx--;
+        }
+      }
+
+      // Next from end could be unit (e.g. 'kg', 'dona', etc.)
+      if (endIdx >= 2) {
+        const possibleUnit = tokens[endIdx].toLowerCase();
+        if (knownUnits.includes(possibleUnit) || isNaN(parseFloat(possibleUnit))) {
+          unit = possibleUnit;
+          endIdx--;
+        }
+      }
+
+      // Next from end should be quantity
+      if (endIdx >= 1) {
+        const qtyClean = tokens[endIdx].replace(/[^\d\.]/g, '');
+        const qtyNum = parseFloat(qtyClean);
+        if (!isNaN(qtyNum) && qtyNum > 0) {
+          quantity = qtyNum;
+          endIdx--;
+        }
+      }
+
+      // Remaining tokens at the beginning form the name
+      if (endIdx >= 0) {
+        name = tokens.slice(0, endIdx + 1).join(' ');
+      }
+    }
+  }
+
+  // Clean and normalize unit
+  unit = unit.replace(/[^\w\u0400-\u04FF']/g, '').trim().toLowerCase();
+  if (unit === 'ta' || unit === 'shtuk' || unit === 'sh' || unit === 'штук' || unit === 'та') unit = 'dona';
+  if (unit === 'l' || unit === 'литр') unit = 'litr';
+  if (unit === 'm' || unit === 'метр') unit = 'metr';
+  if (unit === 'кг') unit = 'kg';
+  if (unit === 'қоп') unit = 'qop';
+  if (unit === 'қути') unit = 'quti';
+  if (unit === 'пачка') unit = 'pachka';
+  if (unit === 'блок') unit = 'blok';
+
+  name = name.trim();
+  if (!name || quantity <= 0 || unitCost <= 0) {
+    return { success: false, error: 'invalid' };
+  }
+
+  // Smart category assignment
+  const n = name.toLowerCase();
+  if (n.includes('olma') || n.includes('shakar') || n.includes('un') || n.includes('guruch') || n.includes('yog') || n.includes('tuxum') || n.includes('non') || n.includes('go\'sht') || n.includes('makaron') || n.includes('kartoshka') || n.includes('piyoz') || n.includes('pomidor') || n.includes('bodring') || n.includes('озиқ') || n.includes('шакар') || n.includes('ун') || n.includes('гуруч') || n.includes('ёғ') || n.includes('тухум')) {
+    category = 'Oziq-ovqat';
+  } else if (n.includes('suv') || n.includes('cola') || n.includes('fanta') || n.includes('choy') || n.includes('kofe') || n.includes('sharbat') || n.includes('pepsi') || n.includes('sok') || n.includes('ichimlik') || n.includes('сув') || n.includes('чой') || n.includes('шарбат') || n.includes('ичимлик')) {
+    category = 'Ichimliklar';
+  } else if (n.includes('sovun') || n.includes('poroshok') || n.includes('shampun') || n.includes('tozalagich') || n.includes('salfetka') || n.includes('yuvish') || n.includes('совун') || n.includes('порошок') || n.includes('шампунь')) {
+    category = "Xo'jalik mollari";
+  } else if (n.includes('daftar') || n.includes('ruchka') || n.includes('qalam') || n.includes('qog\'oz') || n.includes('дафтар') || n.includes('ручка')) {
+    category = 'Kantselyariya';
+  } else {
+    category = 'Umumiy';
+  }
+
+  return {
+    success: true,
+    item: {
+      name,
+      quantity,
+      unit: unit || 'dona',
+      unitCost,
+      markupPercent: Math.max(0, Math.round(markupPercent)),
+      category,
+      supplier,
+    },
+  };
+}
+
 // Helper: Get Gemini Client safely
 function getGeminiClient(): GoogleGenAI | null {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -281,6 +469,144 @@ function getGeminiClient(): GoogleGenAI | null {
       },
     },
   });
+}
+
+interface PendingMarkupSession {
+  items: Array<{
+    name: string;
+    category?: string;
+    quantity: number;
+    unit: string;
+    unitCost: number;
+    totalCost?: number;
+  }>;
+  supplier?: string;
+  date?: string;
+  userName?: string;
+  timestamp: number;
+}
+
+const pendingMarkupSessions = new Map<string, PendingMarkupSession>();
+
+async function scanReceiptImage(imageBase64: string): Promise<{
+  supplier: string;
+  date: string;
+  items: Array<{
+    name: string;
+    category: string;
+    quantity: number;
+    unit: string;
+    unitCost: number;
+    totalCost?: number;
+  }>;
+}> {
+  const ai = getGeminiClient();
+  let scanResult: any = null;
+
+  if (ai) {
+    try {
+      const cleanBase64 = imageBase64.includes('base64,')
+        ? imageBase64.split('base64,')[1]
+        : imageBase64;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: {
+          parts: [
+            {
+              inlineData: {
+                mimeType: 'image/jpeg',
+                data: cleanBase64,
+              },
+            },
+            {
+              text: "Ushbu tovar cheki, tovar yoki hisob-faktura rasmidan tovar nomlari, miqdori, birligi va kelish tannarxini aniq JSON ko'rinishida ajratib ber. Agar bitta tovar rasmi bo'lsa, tovar nomini taxminiy aniqlab 1 dona deb ol.",
+            },
+          ],
+        },
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              supplier: { type: Type.STRING },
+              date: { type: Type.STRING },
+              items: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    name: { type: Type.STRING },
+                    category: { type: Type.STRING },
+                    quantity: { type: Type.NUMBER },
+                    unit: { type: Type.STRING },
+                    unitCost: { type: Type.NUMBER },
+                    totalCost: { type: Type.NUMBER },
+                  },
+                  required: ['name', 'quantity', 'unit', 'unitCost'],
+                },
+              },
+            },
+            required: ['items'],
+          },
+        },
+      });
+      scanResult = JSON.parse(response.text || '{}');
+    } catch (err) {
+      console.error('Scan AI error:', err);
+    }
+  }
+
+  if (!scanResult || !scanResult.items || scanResult.items.length === 0) {
+    scanResult = {
+      supplier: "Savdo Ta'minot MCHJ",
+      date: new Date().toISOString().split('T')[0],
+      items: [
+        { name: "Kungaboqar yog'i (1L)", category: 'Oziq-ovqat', quantity: 24, unit: 'dona', unitCost: 15500, totalCost: 372000 },
+        { name: 'Shakar (1 kg)', category: 'Oziq-ovqat', quantity: 50, unit: 'kg', unitCost: 9000, totalCost: 450000 },
+        { name: 'Tuxum (30 dona)', category: 'Oziq-ovqat', quantity: 10, unit: 'quti', unitCost: 36000, totalCost: 360000 },
+      ],
+    };
+  }
+
+  return scanResult;
+}
+
+function applyMarkupToProducts(
+  items: any[],
+  markupPercent: number,
+  supplierName: string,
+  dateStr?: string
+): { addedProducts: any[]; totalCost: number; totalRevenue: number; expectedProfit: number } {
+  const percent = Math.max(0, Math.round(markupPercent));
+  const addedProducts: any[] = [];
+
+  for (const item of items) {
+    const prod = {
+      id: `prod-photo-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      name: item.name,
+      category: item.category || 'Umumiy',
+      quantity: item.quantity,
+      unit: item.unit || 'dona',
+      unitCost: item.unitCost,
+      markupPercent: percent,
+      date: dateStr || new Date().toISOString().split('T')[0],
+      supplier: supplierName,
+      notes: "Rasm/chek orqali kiritildi",
+    };
+    productsCache.unshift(prod);
+    addedProducts.push(prod);
+  }
+  saveProducts(productsCache);
+
+  const totalCost = addedProducts.reduce((sum, p) => sum + p.quantity * p.unitCost, 0);
+  const totalRevenue = addedProducts.reduce(
+    (sum, p) => sum + p.quantity * Math.round(p.unitCost * (1 + p.markupPercent / 100)),
+    0
+  );
+  const expectedProfit = totalRevenue - totalCost;
+
+  return { addedProducts, totalCost, totalRevenue, expectedProfit };
 }
 
 // -------------------------------------------------------------
@@ -763,29 +1089,34 @@ app.post('/api/telegram/chat', async (req: Request, res: Response) => {
     }
 
     // 5. Handling markup confirmation for previously scanned items
-    if (action === 'apply_markup' && Array.isArray(pendingItems) && markupPercent !== undefined) {
-      const addedCount = pendingItems.length;
-      const percent = Number(markupPercent) || 20;
+    if (action === 'apply_markup' && markupPercent !== undefined) {
+      const itemsToApply = Array.isArray(pendingItems) && pendingItems.length > 0
+        ? pendingItems
+        : pendingMarkupSessions.get(String(chatId))?.items;
 
-      for (const item of pendingItems) {
-        productsCache.unshift({
-          id: `tg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-          name: item.name,
-          category: item.category || 'Oziq-ovqat',
-          quantity: item.quantity,
-          unit: item.unit,
-          unitCost: item.unitCost,
-          markupPercent: percent,
-          date: new Date().toISOString().split('T')[0],
-          supplier: `Telegram (${currentAuthUser.name})`,
-          notes: "Telegram bot orqali chekdan yuklandi",
+      if (!itemsToApply || itemsToApply.length === 0) {
+        res.json({
+          reply: `⚠️ Kutilayotgan tovarlar topilmadi yoki allaqachon saqlangan. Yangi tovar qo'shish uchun /new yoki rasm yuboring.`,
+          isAuthenticated: true,
         });
+        return;
       }
-      saveProducts(productsCache);
+
+      const percent = Number(markupPercent) || 20;
+      const supplierName = currentAuthUser ? `${currentAuthUser.name} (Telegram)` : "Telegram Bot";
+      const { addedProducts, totalCost, totalRevenue, expectedProfit } = applyMarkupToProducts(
+        itemsToApply,
+        percent,
+        supplierName
+      );
+      pendingMarkupSessions.delete(String(chatId));
+
+      const itemsList = addedProducts.map((p, i) => `${i + 1}. <b>${p.name}</b>: ${p.quantity} ${p.unit} (tannarx: ${formatSom(p.unitCost)} -> sotish: <b>${formatSom(Math.round(p.unitCost * (1 + p.markupPercent / 100)))}</b>)`).join('\n');
 
       res.json({
-        reply: `✅ Muvaffaqiyatli saqlandi!\n\n📦 ${addedCount} ta tovar +${percent}% ustama bilan bazaga kiritildi.\nKirituvchi: <b>${currentAuthUser.name}</b>\n\nSiz istalgan vaqtda tovar ma'lumotini tekshirish uchun:\n👉 <code>/search [tovar nomi]</code> yuborishingiz mumkin.`,
+        reply: `✅ <b>Muvaffaqiyatli saqlandi!</b>\n\n📦 <b>${addedProducts.length} ta tovar</b> +${percent}% ustama bilan bazaga kiritildi:\n\n${itemsList}\n\n💰 Jami keltirilgan xarajat: <b>${formatSom(totalCost)}</b>\n📈 Kutilayotgan tushum: <b>${formatSom(totalRevenue)}</b>\n💎 Kutilayotgan sof foyda: <b>+${formatSom(expectedProfit)}</b>\nKirituvchi: <b>${currentAuthUser.name}</b>\n\n💡 <i>Tovar do'kon bazasiga saqlandi va saytda darhol aks etadi!</i>`,
         actionType: 'saved',
+        productAdded: true,
         products: productsCache,
         isAuthenticated: true,
       });
@@ -794,75 +1125,15 @@ app.post('/api/telegram/chat', async (req: Request, res: Response) => {
 
     // 6. Image sent in chat -> AI Gemini Vision scan
     if (imageBase64) {
-      const ai = getGeminiClient();
-      let scanResult: any = null;
+      const scanResult = await scanReceiptImage(imageBase64);
 
-      if (ai) {
-        try {
-          const cleanBase64 = imageBase64.includes('base64,')
-            ? imageBase64.split('base64,')[1]
-            : imageBase64;
-
-          const response = await ai.models.generateContent({
-            model: 'gemini-3.8-flash',
-            contents: {
-              parts: [
-                {
-                  inlineData: {
-                    mimeType: 'image/jpeg',
-                    data: cleanBase64,
-                  },
-                },
-                {
-                  text: "Ushbu tovar cheki/fakturasidan tovarlar nomlari, miqdori, birligi va kelish tannarxini aniq JSON ko'rinishida ajratib ber.",
-                },
-              ],
-            },
-            config: {
-              responseMimeType: 'application/json',
-              responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                  supplier: { type: Type.STRING },
-                  date: { type: Type.STRING },
-                  items: {
-                    type: Type.ARRAY,
-                    items: {
-                      type: Type.OBJECT,
-                      properties: {
-                        name: { type: Type.STRING },
-                        category: { type: Type.STRING },
-                        quantity: { type: Type.NUMBER },
-                        unit: { type: Type.STRING },
-                        unitCost: { type: Type.NUMBER },
-                        totalCost: { type: Type.NUMBER },
-                      },
-                      required: ['name', 'quantity', 'unit', 'unitCost'],
-                    },
-                  },
-                },
-                required: ['items'],
-              },
-            },
-          });
-          scanResult = JSON.parse(response.text || '{}');
-        } catch (err) {
-          console.error('Chat AI scan error:', err);
-        }
-      }
-
-      if (!scanResult || !scanResult.items || scanResult.items.length === 0) {
-        // Fallback realistic scan items
-        scanResult = {
-          supplier: 'Savdo Ta\'minot MCHJ',
-          date: new Date().toISOString().split('T')[0],
-          items: [
-            { name: 'Kungaboqar yog\'i (1L)', category: 'Oziq-ovqat', quantity: 24, unit: 'dona', unitCost: 15500, totalCost: 372000 },
-            { name: 'Shakar (1 kg)', category: 'Oziq-ovqat', quantity: 50, unit: 'kg', unitCost: 9000, totalCost: 450000 },
-            { name: 'Tuxum (30 dona)', category: 'Oziq-ovqat', quantity: 10, unit: 'quti', unitCost: 36000, totalCost: 360000 },
-          ],
-        };
-      }
+      pendingMarkupSessions.set(String(chatId), {
+        items: scanResult.items,
+        supplier: scanResult.supplier,
+        date: scanResult.date,
+        userName: currentAuthUser.name,
+        timestamp: Date.now(),
+      });
 
       const itemsSummary = scanResult.items
         .map(
@@ -872,9 +1143,36 @@ app.post('/api/telegram/chat', async (req: Request, res: Response) => {
         .join('\n');
 
       res.json({
-        reply: `🧾 <b>Hisob-faktura (chek) muvaffaqiyatli skanerlandi!</b>\n\n🏢 Ta'minotchi: <i>${scanResult.supplier || 'Noma\'lum'}</i>\n📅 Sana: <i>${scanResult.date || 'Bugun'}</i>\n\n<b>Topilgan tovarlar:</b>\n${itemsSummary}\n\n❓ <b>Ushbu tovarlar ustiga necha foiz ustama qo'ymoqchisiz?</b>\nQuyidagi tugmalardan birini tanlang yoki o'z foizingizni yozing:`,
+        reply: `🧾 <b>Tovar / hisob-faktura rasmi muvaffaqiyatli skanerlandi!</b>\n\n🏢 Ta'minotchi: <i>${scanResult.supplier || 'Noma\'lum'}</i>\n📅 Sana: <i>${scanResult.date || 'Bugun'}</i>\n\n<b>Topilgan tovarlar:</b>\n${itemsSummary}\n\n❓ <b>Ushbu tovarlar ustiga necha foiz ustama qo'ymoqchisiz?</b>\nQuyidagi tugmalardan birini tanlang yoki o'z foizingizni yozing (masalan: <code>25</code> yoki <code>30%</code>):`,
         actionType: 'ask_markup',
         pendingItems: scanResult.items,
+        isAuthenticated: true,
+      });
+      return;
+    }
+
+    // 6.5. If user entered a markup percentage for pending scanned items
+    const isMarkupNum = /^(\+?\s*\d{1,3}\s*%?|ustama\s*\d{1,3}\s*%?)$/i.test(trimmed) || (!isNaN(parseFloat(trimmed.replace(/[+%\s]/g, ''))) && parseFloat(trimmed.replace(/[+%\s]/g, '')) <= 500 && !trimmed.startsWith('/'));
+    const pendingSession = pendingMarkupSessions.get(String(chatId));
+
+    if (isMarkupNum && pendingSession && pendingSession.items.length > 0) {
+      const percent = parseFloat(trimmed.replace(/[^\d.]/g, '')) || 20;
+      const supplierName = currentAuthUser ? `${currentAuthUser.name} (Telegram)` : (pendingSession.supplier || "Telegram Bot");
+      const { addedProducts, totalCost, totalRevenue, expectedProfit } = applyMarkupToProducts(
+        pendingSession.items,
+        percent,
+        supplierName,
+        pendingSession.date
+      );
+      pendingMarkupSessions.delete(String(chatId));
+
+      const itemsList = addedProducts.map((p, i) => `${i + 1}. <b>${p.name}</b>: ${p.quantity} ${p.unit} (tannarx: ${formatSom(p.unitCost)} -> sotish: <b>${formatSom(Math.round(p.unitCost * (1 + p.markupPercent / 100)))}</b>)`).join('\n');
+
+      res.json({
+        reply: `✅ <b>Muvaffaqiyatli saqlandi!</b>\n\n📦 <b>${addedProducts.length} ta tovar</b> +${percent}% ustama bilan bazaga kiritildi:\n\n${itemsList}\n\n💰 Jami keltirilgan xarajat: <b>${formatSom(totalCost)}</b>\n📈 Kutilayotgan tushum: <b>${formatSom(totalRevenue)}</b>\n💎 Kutilayotgan sof foyda: <b>+${formatSom(expectedProfit)}</b>\n\n💡 <i>Tovarlar do'kon bazasiga kiritildi va saytda aks etadi!</i>`,
+        actionType: 'saved',
+        productAdded: true,
+        products: productsCache,
         isAuthenticated: true,
       });
       return;
@@ -883,7 +1181,7 @@ app.post('/api/telegram/chat', async (req: Request, res: Response) => {
     // 7. Text Commands for Authorized User
     if (trimmed === '/start') {
       res.json({
-        reply: `👋 <b>Xush kelibsiz, ${currentAuthUser.name}!</b>\n\nSiz avtorizatsiyadan o'tgansiz (${currentAuthUser.roleTitle}).\n\nQuyidagi buyruqlardan foydalanishingiz mumkin:\n📸 <b>Chek yoki faktura rasmini yuboring</b> — AI uni avtomat o'qiydi.\n🔎 <b>/search [tovar]</b> — tovar narxi va qoldig'i.\n📊 <b>/statistika</b> — jami xarajat, tushum va sof foyda.\n📑 <b>/excel</b> — tovarlar jadvalini .xlsx yuklab olish.\n📄 <b>/pdf</b> — rasmiy A4 PDF hisobot.\n📱 <b>/webapp</b> — WebApp do'kon ilovasi.\n🔒 <b>/logout</b> — tizimdan chiqish.`,
+        reply: `👋 <b>Xush kelibsiz, ${currentAuthUser.name}!</b>\n\nSiz avtorizatsiyadan o'tgansiz (${currentAuthUser.roleTitle}).\n\nQuyidagi buyruqlardan foydalanishingiz mumkin:\n➕ <b>/new [tovar] [miqdor] [birlik] [tannarx] [ustama]</b> — yangi tovar qo'shish\n📸 <b>Chek yoki faktura rasmini yuboring</b> — AI uni avtomat o'qiydi\n🔎 <b>/search [tovar]</b> — tovar narxi va qoldig'i\n📊 <b>/statistika</b> — jami xarajat, tushum va sof foyda\n📑 <b>/excel</b> — tovarlar jadvalini .xlsx yuklab olish\n📄 <b>/pdf</b> — rasmiy A4 PDF hisobot\n📱 <b>/webapp</b> — WebApp do'kon ilovasi\n🔒 <b>/logout</b> — tizimdan chiqish`,
         isAuthenticated: true,
       });
       return;
@@ -891,7 +1189,68 @@ app.post('/api/telegram/chat', async (req: Request, res: Response) => {
 
     if (trimmed === '/help') {
       res.json({
-        reply: `📌 <b>Telegram Bot Buyruqlari:</b>\n\n• <b>/search [nomi]</b> - Tovar narxi, tannarxi, qoldig'ini ko'rsatadi.\n  <i>Masalan: /search Olma yoki /search Shakar</i>\n• <b>/statistika</b> - Moliyaviy ko'rsatkichlar (KPI).\n• <b>/excel</b> - Barcha tovarlar ro'yxatini Excel (.xlsx) formatida taqdim etadi.\n• <b>/pdf</b> - A4 formatidagi rasmiy chop etish hisoboti.\n• <b>/webapp</b> - To'liq ekranli do'kon ilovasini ochish.\n• <b>/logout</b> - Tizimdan chiqish.\n• <b>Rasm yuborish</b> - Faktura yoki chek rasmini yuboring, Gemini Vision uni tahlil qiladi.`,
+        reply: `📌 <b>Telegram Bot Buyruqlari:</b>\n\n• <b>/new [nomi] [miqdor] [birlik] [tannarx] [ustama]</b> - Yangi tovar qo'shish.\n  <i>Masalan: /new Olma 50 kg 12000 25</i>\n• <b>/search [nomi]</b> - Tovar narxi, tannarxi, qoldig'ini ko'rsatadi.\n  <i>Masalan: /search Olma yoki /search Shakar</i>\n• <b>/statistika</b> - Moliyaviy ko'rsatkichlar (KPI).\n• <b>/excel</b> - Barcha tovarlar ro'yxatini Excel (.xlsx) formatida taqdim etadi.\n• <b>/pdf</b> - A4 formatidagi rasmiy chop etish hisoboti.\n• <b>/webapp</b> - To'liq ekranli do'kon ilovasini ochish.\n• <b>/logout</b> - Tizimdan chiqish.\n• <b>Rasm yuborish</b> - Faktura yoki chek rasmini yuboring, Gemini Vision uni tahlil qiladi.`,
+        isAuthenticated: true,
+      });
+      return;
+    }
+
+    if (trimmed.startsWith('/new') || trimmed.startsWith('/yangi')) {
+      const param = trimmed.replace(/^\/(new|yangi)\s*/i, '').trim();
+      const parsed = parseNewProductInput(param);
+
+      if (!parsed.success) {
+        if (parsed.error === 'empty') {
+          res.json({
+            reply: `➕ <b>Yangi tovar qo'shish (/new buyrug'i)</b>\n\nFormat:\n<code>/new [Nomi] [Miqdori] [Birligi] [Tannarxi] [Ustama%]</code>\n\n📌 <b>Misollar:</b>\n• <code>/new Olma 50 kg 12000 25</code>\n• <code>/new Shakar 100 kg 9500 20</code>\n• <code>/new Coca-Cola 1.5L 24 dona 14000 15</code>\n• <code>/new O'simlik yog'i 30 litr 16500 20</code>\n\n💡 <i>Ustama foizini yozmasangiz, avtomatik 20% hisoblanadi. Vergul bilan ham yozishingiz mumkin:\n<code>/new Non, 100 dona, 3500, 15%</code></i>`,
+            isAuthenticated: true,
+          });
+          return;
+        } else {
+          res.json({
+            reply: `⚠️ <b>Tovar ma'lumotlari to'liq kiritilmadi.</b>\n\nIltimos, quyidagi tartibda yozing:\n<code>/new [Nomi] [Miqdori] [Birligi] [Tannarxi] [Ustama%]</code>\n\nMisol:\n<code>/new Olma 50 kg 12000 25</code>\nyoki\n<code>/new Non, 100 dona, 3500 so'm, 15%</code>`,
+            isAuthenticated: true,
+          });
+          return;
+        }
+      }
+
+      const it = parsed.item!;
+      const newProduct = {
+        id: `prod-bot-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        name: it.name,
+        category: it.category,
+        quantity: it.quantity,
+        unit: it.unit,
+        unitCost: it.unitCost,
+        markupPercent: it.markupPercent,
+        date: new Date().toISOString().split('T')[0],
+        supplier: currentAuthUser ? `${currentAuthUser.name} (Telegram)` : "Telegram Bot orqali",
+        notes: "Telegram /new buyrug'i orqali kiritildi",
+      };
+
+      productsCache.unshift(newProduct);
+      saveProducts(productsCache);
+
+      const unitPrice = Math.round(newProduct.unitCost * (1 + newProduct.markupPercent / 100));
+      const totalCost = newProduct.quantity * newProduct.unitCost;
+      const totalRevenue = newProduct.quantity * unitPrice;
+      const expectedProfit = totalRevenue - totalCost;
+
+      res.json({
+        reply: `✅ <b>Yangi tovar muvaffaqiyatli qo'shildi!</b>\n\n` +
+          `📦 <b>${newProduct.name}</b> (${newProduct.category})\n` +
+          `• Miqdori: <b>${newProduct.quantity} ${newProduct.unit}</b>\n` +
+          `• Keltirilgan tannarxi: <b>${formatSom(newProduct.unitCost)}</b> / ${newProduct.unit}\n` +
+          `• Belgilangan ustama: <b>+${newProduct.markupPercent}%</b>\n` +
+          `• Sotish tavsiya narxi: <b>${formatSom(unitPrice)}</b> / ${newProduct.unit}\n` +
+          `• Jami partiya xarajati: <b>${formatSom(totalCost)}</b>\n` +
+          `• Kutilayotgan sof foyda: <b>+${formatSom(expectedProfit)}</b>\n` +
+          `• Ta'minotchi: <i>${newProduct.supplier}</i> (${newProduct.date})\n\n` +
+          `💡 <i>Tovar do'kon bazasiga saqlandi va veb-saytda darhol aks etadi!</i>`,
+        actionType: 'product_card',
+        productData: newProduct,
+        productAdded: true,
         isAuthenticated: true,
       });
       return;
@@ -1036,19 +1395,185 @@ app.post('/api/telegram/webhook', async (req: Request, res: Response) => {
 
   try {
     const update = req.body;
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    if (!botToken || !update) return;
+
+    // A. Handle inline keyboard callback queries (e.g. markup selection)
+    if (update.callback_query) {
+      const cb = update.callback_query;
+      const cbChatId = cb.message?.chat?.id || cb.from?.id;
+      const cbKey = String(cbChatId);
+      const data = String(cb.data || '');
+
+      // Answer callback query so Telegram loading indicator stops
+      try {
+        await fetch(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ callback_query_id: cb.id }),
+        });
+      } catch (cbErr) {
+        console.error('Error answering callback query:', cbErr);
+      }
+
+      if (data.startsWith('markup_')) {
+        const percent = parseFloat(data.replace('markup_', '')) || 20;
+        const pending = pendingMarkupSessions.get(cbKey);
+
+        if (pending && pending.items.length > 0) {
+          const supplierName = pending.userName ? `${pending.userName} (Telegram)` : (pending.supplier || "Telegram Bot");
+          const { addedProducts, totalCost, totalRevenue, expectedProfit } = applyMarkupToProducts(
+            pending.items,
+            percent,
+            supplierName,
+            pending.date
+          );
+          pendingMarkupSessions.delete(cbKey);
+
+          const itemsList = addedProducts
+            .map(
+              (p, i) =>
+                `${i + 1}. <b>${p.name}</b>: ${p.quantity} ${p.unit} (tannarx: ${formatSom(p.unitCost)} -> sotish: <b>${formatSom(Math.round(p.unitCost * (1 + p.markupPercent / 100)))}</b>)`
+            )
+            .join('\n');
+
+          await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: cbChatId,
+              text: `✅ <b>Tovarlar muvaffaqiyatli saqlandi!</b>\n\n` +
+                `📦 <b>${addedProducts.length} ta tovar</b> +${percent}% ustama bilan bazaga kiritildi:\n\n${itemsList}\n\n` +
+                `💰 Jami partiya tannarxi: <b>${formatSom(totalCost)}</b>\n` +
+                `📈 Kutilayotgan tushum: <b>${formatSom(totalRevenue)}</b>\n` +
+                `💎 Kutilayotgan sof foyda: <b>+${formatSom(expectedProfit)}</b>\n\n` +
+                `💡 <i>Tovarlar do'kon bazasiga kiritildi va saytda aks etadi!</i>`,
+              parse_mode: 'HTML',
+            }),
+          });
+          return;
+        } else {
+          await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: cbChatId,
+              text: `⚠️ Kutilayotgan tovarlar topilmadi yoki allaqachon saqlangan. Yangi tovar qo'shish uchun /new yoki rasm yuboring.`,
+              parse_mode: 'HTML',
+            }),
+          });
+          return;
+        }
+      }
+      return;
+    }
+
+    // B. Handle regular messages
     const message = update?.message;
     if (!message) return;
 
     const chatId = message.chat?.id;
-    const text = message.text || '';
-
-    // If bot token is set in env or sent, we can answer
-    const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    if (!botToken || !chatId) return;
+    if (!chatId) return;
 
     const chatKey = String(chatId);
     let session = telegramAuthSessions.get(chatKey);
 
+    // C. Photo upload handling in Telegram
+    if (message.photo && message.photo.length > 0) {
+      if (!session) {
+        await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: `🔒 <b>Ruxsat etilmadi!</b>\nChek yoki tovar rasmini yuklashdan oldin tizimga kiring:\n👉 <code>/login [login] [parol]</code>\n\nMisol: /login admin admin123`,
+            parse_mode: 'HTML',
+          }),
+        });
+        return;
+      }
+
+      // Send typing action
+      await fetch(`https://api.telegram.org/bot${botToken}/sendChatAction`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: chatId, action: 'typing' }),
+      });
+
+      try {
+        const photo = message.photo[message.photo.length - 1];
+        const fileRes = await fetch(`https://api.telegram.org/bot${botToken}/getFile?file_id=${photo.file_id}`);
+        const fileJson = await fileRes.json();
+        const filePath = fileJson?.result?.file_path;
+
+        let base64 = '';
+        if (filePath) {
+          const imgRes = await fetch(`https://api.telegram.org/file/bot${botToken}/${filePath}`);
+          const arrayBuffer = await imgRes.arrayBuffer();
+          base64 = Buffer.from(arrayBuffer).toString('base64');
+        }
+
+        const scanResult = await scanReceiptImage(base64);
+
+        pendingMarkupSessions.set(chatKey, {
+          items: scanResult.items,
+          supplier: scanResult.supplier,
+          date: scanResult.date,
+          userName: session.user.name,
+          timestamp: Date.now(),
+        });
+
+        const itemsSummary = scanResult.items
+          .map(
+            (it: any, idx: number) =>
+              `${idx + 1}. <b>${it.name}</b>: ${it.quantity} ${it.unit} x ${formatSom(it.unitCost)} = ${formatSom(it.quantity * it.unitCost)}`
+          )
+          .join('\n');
+
+        await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: `🧾 <b>Tovar / hisob-faktura rasmi qabul qilindi!</b>\n\n` +
+              `🏢 Ta'minotchi: <i>${scanResult.supplier || 'Noma\'lum'}</i>\n` +
+              `📅 Sana: <i>${scanResult.date || 'Bugun'}</i>\n\n` +
+              `<b>Aniqlangan tovarlar:</b>\n${itemsSummary}\n\n` +
+              `❓ <b>Ushbu tovarlar ustiga necha foiz ustama qo'ymoqchisiz?</b>\n` +
+              `Quyidagi tugmalardan birini tanlang yoki o'z foizingizni yozing (masalan: <code>25</code> yoki <code>30%</code>):`,
+            parse_mode: 'HTML',
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  { text: '+15% ustama', callback_data: 'markup_15' },
+                  { text: '+20% ustama', callback_data: 'markup_20' },
+                ],
+                [
+                  { text: '+25% ustama', callback_data: 'markup_25' },
+                  { text: '+30% ustama', callback_data: 'markup_30' },
+                ],
+              ],
+            },
+          }),
+        });
+        return;
+      } catch (photoErr) {
+        console.error('Photo processing error in telegram webhook:', photoErr);
+        await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: `⚠️ Rasmni o'qishda xatolik yuz berdi. Iltimos qaytadan yuboring yoki /new buyrug'idan foydalaning.`,
+            parse_mode: 'HTML',
+          }),
+        });
+        return;
+      }
+    }
+
+    // D. Text message handling
+    const text = (message.text || '').trim();
     let responseText = '';
     const loginMatch = text.match(/^\/login(?:\s+([^\s]+)\s+([^\s]+))?$/i);
 
@@ -1072,7 +1597,7 @@ app.post('/api/telegram/webhook', async (req: Request, res: Response) => {
         });
 
         const appUrl = process.env.APP_URL || 'https://aistudio.google.com';
-        responseText = `✅ <b>Avtorizatsiya muvaffaqiyatli!</b>\n\nXush kelibsiz, <b>${matched.name}</b> (${matched.roleTitle})!\n\n📱 <b>SmartSavdo WebApp:</b>\n<a href="${appUrl}?auth_token=${token}">Do'kon WebApp Ilovasini Ochish</a>\n\nEndi buyruqlar faol:\n/search [nomi]\n/statistika\n/excel\n/logout`;
+        responseText = `✅ <b>Avtorizatsiya muvaffaqiyatli!</b>\n\nXush kelibsiz, <b>${matched.name}</b> (${matched.roleTitle})!\n\n📱 <b>SmartSavdo WebApp:</b>\n<a href="${appUrl}?auth_token=${token}">Do'kon WebApp Ilovasini Ochish</a>\n\nEndi buyruqlar faol:\n➕ /new [nomi] [miqdor] [birlik] [tannarx] [ustama]\n📸 Chek yoki tovar rasmini yuboring\n🔎 /search [nomi]\n📊 /statistika\n📑 /excel\n🔒 /logout`;
       } else {
         responseText = `❌ <b>Login yoki parol noto'g'ri!</b>\nQaytadan kiriting: /login [login] [parol]\nMasalan: /login admin admin123`;
       }
@@ -1080,15 +1605,87 @@ app.post('/api/telegram/webhook', async (req: Request, res: Response) => {
       if (session) {
         activeTokens.delete(session.token);
         telegramAuthSessions.delete(chatKey);
+        pendingMarkupSessions.delete(chatKey);
       }
       responseText = `🔒 <b>Tizimdan chiqildi.</b>\nQayta kirish: /login [login] [parol]`;
     } else if (!session) {
       // Not logged in
       responseText = `🔒 <b>SmartSavdo Xavfsizlik Tizimi:</b>\nDo'kon ma'lumotlarini ko'rish uchun avval avtorizatsiyadan o'ting:\n\n👉 <code>/login [login] [parol]</code>\n\nMisol:\n• /login admin admin123\n• /login kassir kassa2026`;
     } else {
-      // Logged in user commands
-      if (text.startsWith('/start')) {
-        responseText = `Assalomu alaykum, <b>${session.user.name}</b>!\nSmartSavdo do'kon botiga xush kelibsiz!\n\nBuyruqlar:\n/search [nomi] - tovar qidirish\n/statistika - kassa va sof foyda\n/excel - Excel hisobot\n/logout - chiqish`;
+      // Check if user is replying with a markup percentage for pending photo
+      const isMarkupInput = /^(\+?\s*\d{1,3}\s*%?|ustama\s*\d{1,3}\s*%?)$/i.test(text) || (!isNaN(parseFloat(text.replace(/[+%\s]/g, ''))) && parseFloat(text.replace(/[+%\s]/g, '')) <= 500 && !text.startsWith('/'));
+      const pending = pendingMarkupSessions.get(chatKey);
+
+      if (isMarkupInput && pending && pending.items.length > 0) {
+        const percent = parseFloat(text.replace(/[^\d.]/g, '')) || 20;
+        const supplierName = pending.userName ? `${pending.userName} (Telegram)` : (pending.supplier || "Telegram Bot");
+        const { addedProducts, totalCost, totalRevenue, expectedProfit } = applyMarkupToProducts(
+          pending.items,
+          percent,
+          supplierName,
+          pending.date
+        );
+        pendingMarkupSessions.delete(chatKey);
+
+        const itemsList = addedProducts
+          .map(
+            (p, i) =>
+              `${i + 1}. <b>${p.name}</b>: ${p.quantity} ${p.unit} (tannarx: ${formatSom(p.unitCost)} -> sotish: <b>${formatSom(Math.round(p.unitCost * (1 + p.markupPercent / 100)))}</b>)`
+          )
+          .join('\n');
+
+        responseText = `✅ <b>Tovarlar muvaffaqiyatli saqlandi!</b>\n\n` +
+          `📦 <b>${addedProducts.length} ta tovar</b> +${percent}% ustama bilan bazaga kiritildi:\n\n${itemsList}\n\n` +
+          `💰 Jami partiya tannarxi: <b>${formatSom(totalCost)}</b>\n` +
+          `📈 Kutilayotgan tushum: <b>${formatSom(totalRevenue)}</b>\n` +
+          `💎 Kutilayotgan sof foyda: <b>+${formatSom(expectedProfit)}</b>\n\n` +
+          `💡 <i>Tovarlar do'kon bazasiga kiritildi va saytda aks etadi!</i>`;
+      } else if (text.startsWith('/start')) {
+        responseText = `Assalomu alaykum, <b>${session.user.name}</b>!\nSmartSavdo do'kon botiga xush kelibsiz!\n\nBuyruqlar:\n➕ /new [nomi] [miqdor] [birlik] [tannarx] [ustama] - yangi tovar qo'shish\n📸 Chek yoki tovar rasmini yuboring - AI avtomat taniydi\n🔎 /search [nomi] - tovar qidirish\n📊 /statistika - kassa va sof foyda\n📑 /excel - Excel hisobot\n🔒 /logout - chiqish`;
+      } else if (text.startsWith('/new') || text.startsWith('/yangi')) {
+        const param = text.replace(/^\/(new|yangi)\s*/i, '').trim();
+        const parsed = parseNewProductInput(param);
+
+        if (!parsed.success) {
+          if (parsed.error === 'empty') {
+            responseText = `➕ <b>Yangi tovar qo'shish (/new buyrug'i)</b>\n\nFormat:\n<code>/new [Nomi] [Miqdori] [Birligi] [Tannarxi] [Ustama%]</code>\n\n📌 <b>Misollar:</b>\n• <code>/new Olma 50 kg 12000 25</code>\n• <code>/new Shakar 100 kg 9500 20</code>\n• <code>/new Coca-Cola 1.5L 24 dona 14000 15</code>\n• <code>/new O'simlik yog'i 30 litr 16500 20</code>\n\n💡 <i>Ustama foizini yozmasangiz, avtomatik 20% hisoblanadi. Vergul bilan ham yozishingiz mumkin:\n<code>/new Non, 100 dona, 3500, 15%</code>\n\nYoki to'g'ridan-to'g'ri chek/tovar rasmini yuboring!</i>`;
+          } else {
+            responseText = `⚠️ <b>Tovar ma'lumotlari to'liq kiritilmadi.</b>\n\nIltimos, quyidagi tartibda yozing:\n<code>/new [Nomi] [Miqdori] [Birligi] [Tannarxi] [Ustama%]</code>\n\nMisol:\n<code>/new Olma 50 kg 12000 25</code>\nyoki\n<code>/new Non, 100 dona, 3500 so'm, 15%</code>`;
+          }
+        } else {
+          const it = parsed.item!;
+          const newProduct = {
+            id: `prod-bot-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            name: it.name,
+            category: it.category,
+            quantity: it.quantity,
+            unit: it.unit,
+            unitCost: it.unitCost,
+            markupPercent: it.markupPercent,
+            date: new Date().toISOString().split('T')[0],
+            supplier: session ? `${session.user.name} (Telegram)` : "Telegram Bot orqali",
+            notes: "Telegram /new buyrug'i orqali kiritildi",
+          };
+
+          productsCache.unshift(newProduct);
+          saveProducts(productsCache);
+
+          const unitPrice = Math.round(newProduct.unitCost * (1 + newProduct.markupPercent / 100));
+          const totalCost = newProduct.quantity * newProduct.unitCost;
+          const totalRevenue = newProduct.quantity * unitPrice;
+          const expectedProfit = totalRevenue - totalCost;
+
+          responseText = `✅ <b>Yangi tovar muvaffaqiyatli qo'shildi!</b>\n\n` +
+            `📦 <b>${newProduct.name}</b> (${newProduct.category})\n` +
+            `• Miqdori: <b>${newProduct.quantity} ${newProduct.unit}</b>\n` +
+            `• Keltirilgan tannarxi: <b>${formatSom(newProduct.unitCost)}</b> / ${newProduct.unit}\n` +
+            `• Belgilangan ustama: <b>+${newProduct.markupPercent}%</b>\n` +
+            `• Sotish tavsiya narxi: <b>${formatSom(unitPrice)}</b> / ${newProduct.unit}\n` +
+            `• Jami partiya xarajati: <b>${formatSom(totalCost)}</b>\n` +
+            `• Kutilayotgan sof foyda: <b>+${formatSom(expectedProfit)}</b>\n` +
+            `• Ta'minotchi: <i>${newProduct.supplier}</i> (${newProduct.date})\n\n` +
+            `💡 <i>Tovar do'kon bazasiga saqlandi va veb-saytda darhol aks etadi!</i>`;
+        }
       } else if (text.startsWith('/search')) {
         const q = text.replace('/search', '').trim().toLowerCase();
         const match = productsCache.find((p) => p.name.toLowerCase().includes(q));
@@ -1102,7 +1699,7 @@ app.post('/api/telegram/webhook', async (req: Request, res: Response) => {
         const totalRev = productsCache.reduce((sum, p) => sum + p.quantity * (p.unitCost * (1 + p.markupPercent / 100)), 0);
         responseText = `📊 <b>Do'kon Balansi:</b>\n💰 Tannarx: ${formatSom(totalCost)}\n📈 Tushum: ${formatSom(totalRev)}\n💎 Sof Foyda: ${formatSom(totalRev - totalCost)}\n📦 Tovar turlari: ${productsCache.length} xil`;
       } else {
-        responseText = `Xush kelibsiz! Buyruqlar: /search [tovar], /statistika, /excel, /logout`;
+        responseText = `Xush kelibsiz! Buyruqlar:\n➕ /new [nomi] [miqdor] [birlik] [tannarx] [ustama]\n📸 Chek rasmini yuboring\n🔎 /search [tovar]\n📊 /statistika\n🔒 /logout`;
       }
     }
 
@@ -1134,8 +1731,31 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  app.listen(PORT, '0.0.0.0', async () => {
     console.log(`Server running on http://0.0.0.0:${PORT}`);
+
+    // Auto-register Telegram webhook if bot token and domain are provided in environment
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    const appUrl = process.env.APP_URL || process.env.RAILWAY_PUBLIC_DOMAIN
+      ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
+      : undefined;
+
+    if (botToken && appUrl) {
+      try {
+        const cleanBaseUrl = appUrl.startsWith('http') ? appUrl.replace(/\/$/, '') : `https://${appUrl}`;
+        const webhookUrl = `${cleanBaseUrl}/api/telegram/webhook`;
+        console.log(`Setting Telegram webhook to: ${webhookUrl}`);
+        const response = await fetch(`https://api.telegram.org/bot${botToken}/setWebhook`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: webhookUrl }),
+        });
+        const result = await response.json();
+        console.log('Telegram Webhook Setup Result:', result);
+      } catch (webhookErr) {
+        console.error('Failed to auto-configure Telegram webhook:', webhookErr);
+      }
+    }
   });
 }
 

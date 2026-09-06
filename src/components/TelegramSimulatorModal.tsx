@@ -18,6 +18,7 @@ import {
   ShieldCheck,
   Smartphone,
   LogOut,
+  Camera,
 } from 'lucide-react';
 import { Product, TelegramMessage, AuthUser } from '../types';
 import { exportProductsToExcel } from '../utils/excelManager';
@@ -53,11 +54,11 @@ export const TelegramSimulatorModal: React.FC<TelegramSimulatorModalProps> = ({
   const getInitialBotMsg = () => {
     if (language === 'uz-cyrl') {
       return botSessionToken
-        ? "👋 <b>Ассалому алайкум!</b>\nМен дўкон товарлари ва ҳисоб-китоблар ботиман.\n\n🛡️ <b>Сиз авторизациядан ўтгансиз</b>.\n\nТезкор буйруқлар:\n• <code>/search [номи]</code> — товар нархи ва қолдиғи\n• <code>/statistika</code> — касса ва соф фойда\n• <code>/excel</code> — Excel жадвали\n• <code>/pdf</code> — A4 ҳисобот\n• <code>/webapp</code> — WebApp дўкон иловасини очиш\n• 📸 Чек расмини юбориш — AI таҳлил"
+        ? "👋 <b>Ассалому алайкум!</b>\nМен дўкон товарлари ва ҳисоб-китоблар ботиман.\n\n🛡️ <b>Сиз авторизациядан ўтгансиз</b>.\n\nТезкор буйруқлар:\n• <code>/new [номи] [миқдор] [бирлик] [таннарх] [устама]</code> — янги товар қўшиш\n• <code>/search [номи]</code> — товар нархи ва қолдиғи\n• <code>/statistika</code> — касса ва соф фойда\n• <code>/excel</code> — Excel жадвали\n• <code>/pdf</code> — A4 ҳисобот\n• <code>/webapp</code> — WebApp дўкон иловасини очиш\n• 📸 Чек расмини юбориш — AI таҳлил"
         : "👋 <b>Ассалому алайкум!</b>\nМен <b>SmartSavdo</b> дўкон бошқарув ботиман.\n\n🔒 <b>Хавфсизлик талаби:</b> Маълумотларни кўриш ва амалларни бажариш учун аввал тизимга киринг:\n👉 <code>/login [логин] [парол]</code>\n\nМисол:\n• <code>/login admin admin123</code> (Бошқарувчи)\n• <code>/login kassir kassa2026</code> (Кассир)";
     }
     return botSessionToken
-      ? "👋 <b>Assalomu alaykum!</b>\nMen do'kon tovarlari va hisob-kitoblar botiman.\n\n🛡️ <b>Siz avtorizatsiyadan o'tgansiz</b>.\n\nTezkor buyruqlar:\n• <code>/search [nomi]</code> — tovar narxi va qoldig'i\n• <code>/statistika</code> — kassa va sof foyda\n• <code>/excel</code> — Excel jadvali\n• <code>/pdf</code> — A4 hisobot\n• <code>/webapp</code> — WebApp do'kon ilovasini ochish\n• 📸 Chek rasmini yuborish — AI tahlil"
+      ? "👋 <b>Assalomu alaykum!</b>\nMen do'kon tovarlari va hisob-kitoblar botiman.\n\n🛡️ <b>Siz avtorizatsiyadan o'tgansiz</b>.\n\nTezkor buyruqlar:\n• <code>/new [nomi] [miqdor] [birlik] [tannarx] [ustama]</code> — yangi tovar qo'shish\n• <code>/search [nomi]</code> — tovar narxi va qoldig'i\n• <code>/statistika</code> — kassa va sof foyda\n• <code>/excel</code> — Excel jadvali\n• <code>/pdf</code> — A4 hisobot\n• <code>/webapp</code> — WebApp do'kon ilovasini ochish\n• 📸 Chek rasmini yuborish — AI tahlil"
       : "👋 <b>Assalomu alaykum!</b>\nMen <b>SmartSavdo</b> do'kon boshqaruv botiman.\n\n🔒 <b>Xavfsizlik talabi:</b> Ma'lumotlarni ko'rish va amallarni bajarish uchun avval tizimga kiring:\n👉 <code>/login [login] [parol]</code>\n\nMisol:\n• <code>/login admin admin123</code> (Boshqaruvchi)\n• <code>/login kassir kassa2026</code> (Kassir)";
   };
 
@@ -156,6 +157,11 @@ export const TelegramSimulatorModal: React.FC<TelegramSimulatorModalProps> = ({
 
         if (data.actionType === 'ask_markup' && data.pendingItems) {
           setPendingMarkupItems(data.pendingItems);
+        }
+
+        if (data.productAdded || data.actionType === 'product_card' || data.actionType === 'saved') {
+          onProductsUpdated();
+          setPendingMarkupItems(null);
         }
 
         setMessages((prev) => [...prev, botMsg]);
@@ -394,16 +400,53 @@ export const TelegramSimulatorModal: React.FC<TelegramSimulatorModalProps> = ({
 
                       {/* Action: Inline Markup Selection Buttons */}
                       {msg.actionType === 'ask_markup' && pendingMarkupItems && (
-                        <div className="mt-3 pt-2.5 border-t border-slate-800 flex flex-wrap gap-1.5">
-                          {[15, 20, 25, 30].map((p) => (
+                        <div className="mt-3 pt-2.5 border-t border-slate-800 space-y-2">
+                          <div className="text-[11px] text-slate-400 font-medium">
+                            {language === 'uz-cyrl' ? 'Устама фоизини танланг ёки киритинг:' : 'Ustama foizini tanlang yoki kiriting:'}
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {[10, 15, 20, 25, 30, 40].map((p) => (
+                              <button
+                                key={p}
+                                onClick={() => handleSelectMarkup(p)}
+                                className="px-2.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition shadow-lg shadow-emerald-500/20 active:scale-95 cursor-pointer"
+                              >
+                                +{p}% {language === 'uz-cyrl' ? 'устама' : 'ustama'}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="flex items-center gap-1.5 pt-1">
+                            <input
+                              type="number"
+                              min="0"
+                              max="300"
+                              placeholder={language === 'uz-cyrl' ? 'Масалан: 35' : 'Masalan: 35'}
+                              id="custom-markup-input"
+                              className="w-32 px-2.5 py-1 text-xs rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:outline-none focus:border-emerald-500 font-mono"
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  const val = parseFloat((e.target as HTMLInputElement).value);
+                                  if (!isNaN(val) && val >= 0) {
+                                    handleSelectMarkup(val);
+                                  }
+                                }
+                              }}
+                            />
+                            <span className="text-xs text-slate-400 font-bold">%</span>
                             <button
-                              key={p}
-                              onClick={() => handleSelectMarkup(p)}
-                              className="px-2.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition shadow-lg shadow-emerald-500/20"
+                              type="button"
+                              onClick={() => {
+                                const inp = document.getElementById('custom-markup-input') as HTMLInputElement;
+                                const val = parseFloat(inp?.value || '');
+                                if (!isNaN(val) && val >= 0) {
+                                  handleSelectMarkup(val);
+                                }
+                              }}
+                              className="px-2.5 py-1 text-xs rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-400 font-bold transition cursor-pointer"
                             >
-                              +{p}% {language === 'uz-cyrl' ? 'устама' : 'ustama'}
+                              {language === 'uz-cyrl' ? 'Қўллаш' : "Qo'llash"}
                             </button>
-                          ))}
+                          </div>
                         </div>
                       )}
 
@@ -509,8 +552,19 @@ export const TelegramSimulatorModal: React.FC<TelegramSimulatorModalProps> = ({
 
             {/* Quick Command Chips */}
             <div className="px-3 py-2 bg-slate-950/80 border-t border-slate-800 flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+              {botSessionToken && (
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-2.5 py-1 rounded-xl bg-emerald-500/20 border border-emerald-500/40 hover:bg-emerald-500/30 text-emerald-300 text-xs font-semibold shrink-0 transition flex items-center gap-1 cursor-pointer"
+                >
+                  <Camera className="w-3.5 h-3.5" />
+                  <span>{language === 'uz-cyrl' ? '📷 Чек расми' : '📷 Chek rasmi'}</span>
+                </button>
+              )}
               {(botSessionToken
                 ? [
+                    { label: '➕ /new', cmd: '/new' },
+                    { label: language === 'uz-cyrl' ? '➕ /new Олма 50 кг 12000 25' : '➕ /new Olma 50 kg 12000 25', cmd: language === 'uz-cyrl' ? '/new Олма 50 кг 12000 25' : '/new Olma 50 kg 12000 25' },
                     { label: '📱 /webapp', cmd: '/webapp' },
                     { label: '📊 /statistika', cmd: '/statistika' },
                     { label: language === 'uz-cyrl' ? '🔎 /search Олма' : '🔎 /search Olma', cmd: language === 'uz-cyrl' ? '/search Олма' : '/search Olma' },
@@ -558,8 +612,8 @@ export const TelegramSimulatorModal: React.FC<TelegramSimulatorModalProps> = ({
                 type="text"
                 placeholder={
                   language === 'uz-cyrl'
-                    ? 'Хабар ёзинг ёки /search...'
-                    : 'Xabar yozing yoki /search...'
+                    ? 'Хабар ёзинг ёки /new, /search...'
+                    : 'Xabar yozing yoki /new, /search...'
                 }
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
