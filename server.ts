@@ -14,6 +14,7 @@ import {
   getSavedTelegramSession,
   saveTelegramSession,
   getDbDiagnostics,
+  pingMongoDatabase,
 } from './server/mongodb';
 
 const app = express();
@@ -832,6 +833,36 @@ app.get('/api/database/status', async (req: Request, res: Response) => {
     res.json(diag);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// 5c. Database Health Check & Live Ping
+app.get('/api/database/ping', async (req: Request, res: Response) => {
+  try {
+    const result = await pingMongoDatabase();
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ ok: false, connected: false, error: err.message });
+  }
+});
+
+// 5d. General application health check
+app.get('/api/health', async (req: Request, res: Response) => {
+  try {
+    const dbPing = await pingMongoDatabase();
+    res.json({
+      status: 'ok',
+      uptime: process.uptime(),
+      timestamp: new Date().toISOString(),
+      database: dbPing,
+    });
+  } catch (err: any) {
+    res.json({
+      status: 'ok',
+      uptime: process.uptime(),
+      timestamp: new Date().toISOString(),
+      database: { ok: false, connected: false, error: err.message },
+    });
   }
 });
 

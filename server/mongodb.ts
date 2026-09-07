@@ -52,6 +52,9 @@ function getMongoUri(): string | undefined {
   return (
     process.env.MONGODB_URI?.trim() ||
     process.env.MONGO_URL?.trim() ||
+    process.env.MONGO_PRIVATE_URL?.trim() ||
+    process.env.MONGO_PUBLIC_URL?.trim() ||
+    process.env.MONGODB_URL?.trim() ||
     process.env.DATABASE_URL?.trim() ||
     undefined
   );
@@ -396,3 +399,81 @@ export async function getDbDiagnostics() {
       'Railway Dashboard -> New -> Database -> Add MongoDB. Railway MONGODB_URI yoki MONGO_URL o\'zgaruvchisini avtomatik qo\'shadi.',
   };
 }
+
+// -------------------------------------------------------------
+// LIVE PING & HEALTH CHECK
+// -------------------------------------------------------------
+export async function pingMongoDatabase() {
+  const uri = getMongoUri();
+  const dbName = getDatabaseName();
+  const start = Date.now();
+
+  if (!uri) {
+    return {
+      ok: false,
+      connected: false,
+      mode: 'local_json_fallback',
+      databaseName: dbName,
+      message: 'MongoDB URI sozlanmagan (MONGODB_URI / MONGO_PRIVATE_URL topilmadi)',
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  try {
+    if (!isConnected || !mongoDb) {
+      // Attempt live reconnect
+      const client = new MongoClient(uri, {
+        serverSelectionTimeoutMS: 5000,
+        connectTimeoutMS: 5000,
+      });
+      await client.connect();
+      const db = client.db(dbName);
+      await db.command({ ping: 1 });
+      mongoClient = client;
+      mongoDb = db;
+      isConnected = true;
+      lastMongoError = null;
+    } else {
+      await mongoDb.command({ ping: 1 });
+    }
+
+    const latencyMs = Date.now() - start;
+    let productCount = 0;
+    let userCount = 0;
+    try {
+      if (mongoDb) {
+        productCount = await mongoDb.collection('products').countDocuments();
+        userCount = await mongoDb.collection('users').countDocuments();
+      }
+    } catch {
+      // ignore
+    }
+
+    return {
+      ok: true,
+      connected: true,
+      mode: 'mongodb',
+      latencyMs,
+      databaseName: dbName,
+      productCount,
+      userCount,
+      message: `MongoDB faol va javob berdi (${latencyMs} ms)`,
+      timestamp: new Date().toISOString(),
+    };
+  } catch (err: any) {
+    const latencyMs = Date.now() - start;
+    isConnected = false;
+    lastMongoError = err.message || 'Ping failed';
+    return {
+      ok: false,
+      connected: false,
+      mode: 'local_json_fallback',
+      latencyMs,
+      databaseName: dbName,
+      message: `MongoDB ping xatosi: ${lastMongoError}`,
+      error: lastMongoError,
+      timestamp: new Date().toISOString(),
+    };
+  }
+}
+

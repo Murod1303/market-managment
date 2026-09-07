@@ -13,6 +13,11 @@ import {
   X,
   Copy,
   Check,
+  Activity,
+  Zap,
+  Wifi,
+  Clock,
+  XCircle,
 } from 'lucide-react';
 
 interface DbStatusData {
@@ -27,6 +32,17 @@ interface DbStatusData {
   railwayInstruction: string;
 }
 
+interface PingResult {
+  ok: boolean;
+  connected: boolean;
+  mode?: string;
+  latencyMs?: number;
+  message: string;
+  timestamp: string;
+  databaseName?: string;
+  error?: string;
+}
+
 interface DatabaseStatusModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -38,6 +54,8 @@ export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({
 }) => {
   const [status, setStatus] = useState<DbStatusData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [pingLoading, setPingLoading] = useState(false);
+  const [pingResult, setPingResult] = useState<PingResult | null>(null);
   const [copied, setCopied] = useState(false);
 
   const fetchStatus = async () => {
@@ -52,6 +70,35 @@ export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({
       console.error('Failed to fetch DB status:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  /**
+   * Ping function that reaches backend health check endpoint (/api/database/ping)
+   * to verify whether MongoDB connection is active and measure round-trip latency.
+   */
+  const ping = async () => {
+    setPingLoading(true);
+    try {
+      const res = await fetch('/api/database/ping');
+      const data: PingResult = await res.json();
+      setPingResult(data);
+
+      // Refresh full status info in parallel
+      const statusRes = await fetch('/api/database/status');
+      if (statusRes.ok) {
+        const statusData = await statusRes.json();
+        setStatus(statusData);
+      }
+    } catch (err: any) {
+      setPingResult({
+        ok: false,
+        connected: false,
+        message: err.message || "Serverga bog'lanishda xatolik yuz berdi",
+        timestamp: new Date().toISOString(),
+      });
+    } finally {
+      setPingLoading(false);
     }
   };
 
@@ -133,6 +180,75 @@ export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({
                   : "Hozirda ma'lumotlar server xotirasida (JSON) saqlanmoqda. Railway'da to'liq doimiy MongoDB'ga ulash uchun quyidagi ko'rsatmalardan foydalaning."}
               </p>
             </div>
+          </div>
+
+          {/* Live Ping & Health Check Section */}
+          <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                  <Activity className="w-3.5 h-3.5" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-semibold text-slate-200">
+                    MongoDB Bog'lanishini Tekshirish (Live Ping)
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    /api/database/ping orqali server va MongoDB orasidagi aloqani sinash
+                  </p>
+                </div>
+              </div>
+
+              <button
+                id="ping-db-btn"
+                onClick={ping}
+                disabled={pingLoading}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-semibold text-xs transition shadow-xs"
+                title="MongoDB ga ping so'rovi yuborish"
+              >
+                <Zap className={`w-3.5 h-3.5 ${pingLoading ? 'animate-bounce' : ''}`} />
+                <span>{pingLoading ? 'Tekshirilmoqda...' : 'Ping yuborish'}</span>
+              </button>
+            </div>
+
+            {/* Ping Result Banner if available */}
+            {pingResult && (
+              <div
+                id="ping-result-display"
+                className={`p-3 rounded-lg border text-xs flex items-start gap-2.5 transition-all ${
+                  pingResult.ok && pingResult.connected
+                    ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-200'
+                    : 'bg-rose-950/30 border-rose-500/40 text-rose-200'
+                }`}
+              >
+                {pingResult.ok && pingResult.connected ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                ) : (
+                  <XCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                )}
+                <div className="flex-1 space-y-1">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <span className="font-semibold text-slate-100">
+                      {pingResult.connected
+                        ? 'MongoDB faol va so\'rovlarga javob bermoqda'
+                        : 'MongoDB bilan to\'g\'ridan-to\'g\'ri aloqa mavjud emas'}
+                    </span>
+                    {pingResult.latencyMs !== undefined && (
+                      <span className="px-2 py-0.5 rounded-full font-mono text-[11px] bg-slate-900 border border-slate-700 text-emerald-400 font-bold">
+                        {pingResult.latencyMs} ms
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-300 leading-normal">
+                    {pingResult.message}
+                  </p>
+                  <div className="text-[10px] text-slate-400 flex items-center gap-1 pt-0.5">
+                    <Clock className="w-3 h-3" />
+                    <span>Oxirgi tekshiruv: {new Date(pingResult.timestamp).toLocaleTimeString()}</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Metrics Grid */}
@@ -221,15 +337,26 @@ export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({
 
         {/* Footer */}
         <div className="flex items-center justify-between px-6 py-4 border-t border-slate-800 bg-slate-950/60">
-          <button
-            id="refresh-db-status-btn"
-            onClick={fetchStatus}
-            disabled={loading}
-            className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-            Holatni tekshirish
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              id="refresh-db-status-btn"
+              onClick={fetchStatus}
+              disabled={loading}
+              className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+              Holatni yangilash
+            </button>
+            <button
+              id="footer-ping-db-btn"
+              onClick={ping}
+              disabled={pingLoading}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-300 bg-emerald-950/60 border border-emerald-500/30 hover:bg-emerald-900/50 rounded-lg transition-colors disabled:opacity-50"
+            >
+              <Zap className={`w-3.5 h-3.5 text-emerald-400 ${pingLoading ? 'animate-bounce' : ''}`} />
+              Ping
+            </button>
+          </div>
           <button
             id="close-db-dialog-btn"
             onClick={onClose}
