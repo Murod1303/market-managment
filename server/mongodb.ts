@@ -49,7 +49,7 @@ let connectionAttempted = false;
 let lastMongoError: string | null = null;
 
 function getMongoUri(): string | undefined {
-  return (
+  let uri = (
     process.env.MONGODB_URI?.trim() ||
     process.env.MONGO_URL?.trim() ||
     process.env.MONGO_PRIVATE_URL?.trim() ||
@@ -58,6 +58,13 @@ function getMongoUri(): string | undefined {
     process.env.DATABASE_URL?.trim() ||
     undefined
   );
+
+  if (uri) {
+    // Strip surrounding quotes if accidentally included in env variables
+    uri = uri.replace(/^["']|["']$/g, '').trim();
+  }
+
+  return uri || undefined;
 }
 
 function getDatabaseName(): string {
