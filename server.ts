@@ -3,6 +3,18 @@ import path from 'path';
 import fs from 'fs';
 import { GoogleGenAI, Type } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
+import {
+  initMongoDatabase,
+  getDbProducts,
+  upsertDbProduct,
+  deleteDbProduct,
+  bulkUpsertDbProducts,
+  getDbUsers,
+  upsertDbUser,
+  getSavedTelegramSession,
+  saveTelegramSession,
+  getDbDiagnostics,
+} from './server/mongodb';
 
 const app = express();
 const PORT = 3000;
@@ -196,6 +208,10 @@ function saveUsers(users: AppUser[]) {
   } catch (err) {
     console.error('Error writing USERS_FILE:', err);
   }
+  // Sync each user to MongoDB
+  for (const u of users) {
+    upsertDbUser(u).catch(() => {});
+  }
 }
 
 let usersCache = loadUsers();
@@ -258,6 +274,10 @@ function saveProducts(products: any[]) {
   } catch (err) {
     console.error('Error writing DB_FILE:', err);
   }
+  // Asynchronously persist to MongoDB
+  bulkUpsertDbProducts(products).catch((err) => {
+    console.error('[MongoDB] Error in bulkUpsertDbProducts:', err);
+  });
 }
 
 let productsCache = loadProducts();
@@ -801,7 +821,18 @@ app.delete('/api/products/:id', (req: Request, res: Response) => {
   const { id } = req.params;
   productsCache = productsCache.filter((p) => p.id !== id);
   saveProducts(productsCache);
+  deleteDbProduct(id).catch(() => {});
   res.json({ success: true, products: productsCache });
+});
+
+// 5b. Database diagnostics and MongoDB connection status
+app.get('/api/database/status', async (req: Request, res: Response) => {
+  try {
+    const diag = await getDbDiagnostics();
+    res.json(diag);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // 6. Reset to default demo data
@@ -1367,17 +1398,23 @@ app.post('/api/telegram/chat', async (req: Request, res: Response) => {
 // TELEGRAM BOT CORE & UPDATE PROCESSING
 // -------------------------------------------------------------
 function getPublicAppUrl(): string | undefined {
-  if (process.env.APP_URL && process.env.APP_URL.trim()) {
-    const u = process.env.APP_URL.trim();
-    return u.startsWith('http') ? u.replace(/\/$/, '') : `https://${u}`;
-  }
+  // 1. Check Railway environment first
   if (process.env.RAILWAY_PUBLIC_DOMAIN && process.env.RAILWAY_PUBLIC_DOMAIN.trim()) {
-    const d = process.env.RAILWAY_PUBLIC_DOMAIN.trim();
-    return `https://${d.replace(/\/$/, '')}`;
+    let d = process.env.RAILWAY_PUBLIC_DOMAIN.trim();
+    d = d.replace(/^https?:\/\//, '').replace(/\/$/, '');
+    return `https://${d}`;
   }
   if (process.env.RAILWAY_STATIC_URL && process.env.RAILWAY_STATIC_URL.trim()) {
-    const s = process.env.RAILWAY_STATIC_URL.trim();
-    return s.startsWith('http') ? s.replace(/\/$/, '') : `https://${s}`;
+    let s = process.env.RAILWAY_STATIC_URL.trim();
+    s = s.replace(/^https?:\/\//, '').replace(/\/$/, '');
+    return `https://${s}`;
+  }
+  // 2. Custom APP_URL (ignore internal .run.app and localhost which cannot receive webhooks)
+  if (process.env.APP_URL && process.env.APP_URL.trim()) {
+    const u = process.env.APP_URL.trim().replace(/\/$/, '');
+    if (!u.includes('.run.app') && !u.includes('localhost') && !u.includes('127.0.0.1')) {
+      return u.startsWith('http') ? u : `https://${u}`;
+    }
   }
   return undefined;
 }
@@ -1471,6 +1508,32 @@ async function processTelegramUpdate(update: any, botToken: string): Promise<voi
 
   const chatKey = String(chatId);
   let session = telegramAuthSessions.get(chatKey);
+
+  // Check saved persistent session from MongoDB if not in memory
+  if (!session) {
+    try {
+      const saved = await getSavedTelegramSession(chatKey);
+      if (saved) {
+        const matched = usersCache.find(
+          (u) => u.id === saved.userId || u.username.toLowerCase() === saved.username.toLowerCase()
+        );
+        if (matched) {
+          session = {
+            user: matched,
+            token: saved.token,
+            loginAt: saved.loginAt,
+          };
+          telegramAuthSessions.set(chatKey, session);
+          activeTokens.set(saved.token, {
+            user: matched,
+            expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
+          });
+        }
+      }
+    } catch (sErr) {
+      // ignore
+    }
+  }
 
   // C. Photo upload handling in Telegram
   if (message.photo && message.photo.length > 0) {
@@ -1589,6 +1652,16 @@ async function processTelegramUpdate(update: any, botToken: string): Promise<voi
         token,
         loginAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       });
+
+      // Persist Telegram login session to MongoDB
+      saveTelegramSession({
+        chatId: chatKey,
+        userId: matched.id,
+        username: matched.username,
+        token,
+        loginAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        updatedAt: new Date().toISOString(),
+      }).catch((err) => console.error('Error saving telegram session:', err));
 
       const appUrl = getPublicAppUrl() || 'https://aistudio.google.com';
       responseText = `✅ <b>Avtorizatsiya muvaffaqiyatli!</b>\n\nXush kelibsiz, <b>${matched.name}</b> (${matched.roleTitle})!\n\n📱 <b>SmartSavdo WebApp:</b>\n<a href="${appUrl}?auth_token=${token}">Do'kon WebApp Ilovasini Ochish</a>\n\nEndi buyruqlar faol:\n➕ /new [nomi] [miqdor] [birlik] [tannarx] [ustama]\n📸 Chek yoki tovar rasmini yuboring\n🔎 /search [nomi]\n📊 /statistika\n📑 /excel\n🔒 /logout`;
@@ -1950,6 +2023,18 @@ async function startServer() {
   app.listen(PORT, '0.0.0.0', async () => {
     console.log(`Server running on http://0.0.0.0:${PORT}`);
 
+    // Initialize MongoDB Database (with fallback to local files)
+    try {
+      const isMongoReady = await initMongoDatabase(defaultProducts, defaultUsers);
+      if (isMongoReady) {
+        productsCache = await getDbProducts(defaultProducts);
+        usersCache = await getDbUsers(defaultUsers);
+        console.log(`[MongoDB] Database connected! Loaded ${productsCache.length} products & ${usersCache.length} users.`);
+      }
+    } catch (dbInitErr) {
+      console.warn('[MongoDB] Database init warning:', dbInitErr);
+    }
+
     // Intelligent Telegram Bot Initialization
     const botToken = runtimeBotToken || process.env.TELEGRAM_BOT_TOKEN;
     if (botToken) {
@@ -1966,10 +2051,10 @@ async function startServer() {
           const currentWhUrl = whData?.result?.url || '';
 
           const detectedUrl = getPublicAppUrl();
-          const preferPolling = process.env.TELEGRAM_BOT_MODE === 'polling' || !detectedUrl;
+          const explicitWebhook = process.env.TELEGRAM_BOT_MODE === 'webhook' && !!detectedUrl;
 
-          if (preferPolling) {
-            console.log('[Telegram Bot] Starting in Long Polling mode (100% reliable on Railway without domain)...');
+          if (!explicitWebhook) {
+            console.log('[Telegram Bot] Starting in Long Polling mode (100% reliable, direct Telegram connection)...');
             await fetch(`https://api.telegram.org/bot${botToken}/deleteWebhook`);
             startTelegramPolling(botToken);
           } else {

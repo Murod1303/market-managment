@@ -14,6 +14,7 @@ import { FinancialStatsModal } from './components/FinancialStatsModal';
 import { ExcelManagerModal } from './components/ExcelManagerModal';
 import { TelegramSimulatorModal } from './components/TelegramSimulatorModal';
 import { ProductDetailsModal } from './components/ProductDetailsModal';
+import { DatabaseStatusModal } from './components/DatabaseStatusModal';
 import { LoginScreen } from './components/LoginScreen';
 import { Product, AuthUser } from './types';
 import { initialProducts } from './data/initialProducts';
@@ -32,6 +33,7 @@ import {
   Store,
   LogOut,
   ShieldCheck,
+  Database,
 } from 'lucide-react';
 
 export default function App() {
@@ -47,6 +49,7 @@ export default function App() {
   // Modals state
   const [isScannerOpen, setIsScannerOpen] = useState<boolean>(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
+  const [isDbModalOpen, setIsDbModalOpen] = useState<boolean>(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isExcelModalOpen, setIsExcelModalOpen] = useState<boolean>(false);
   const [isStatsModalOpen, setIsStatsModalOpen] = useState<boolean>(false);
@@ -490,6 +493,7 @@ export default function App() {
             onOpenExcelModal={() => setIsExcelModalOpen(true)}
             onOpenStatsModal={() => setIsStatsModalOpen(true)}
             onOpenTelegramModal={() => setIsTelegramModalOpen(true)}
+            onOpenDbModal={() => setIsDbModalOpen(true)}
             onOpenQuickSearch={() => setIsQuickSearchOpen(true)}
             isTelegramWebAppView={isTelegramWebAppView}
             onToggleTelegramView={() => setIsTelegramWebAppView(true)}
@@ -537,6 +541,16 @@ export default function App() {
                 >
                   <MessageSquare className="w-4 h-4 text-sky-400" />
                   <span>{t('telegramBotBtn')}</span>
+                </button>
+
+                <button
+                  id="hero-btn-mongodb"
+                  onClick={() => setIsDbModalOpen(true)}
+                  className="px-4 py-2.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 font-semibold text-xs sm:text-sm border border-emerald-500/30 transition flex items-center gap-2"
+                  title="MongoDB Ma'lumotlar Bazasi Holati"
+                >
+                  <Database className="w-4 h-4 text-emerald-400" />
+                  <span>MongoDB Bazasi</span>
                 </button>
 
                 <button
@@ -684,6 +698,12 @@ export default function App() {
           setSelectedDetailProduct(null);
           handleDeleteProduct(id);
         }}
+      />
+
+      {/* 8. MongoDB Database Status & Settings Modal */}
+      <DatabaseStatusModal
+        isOpen={isDbModalOpen}
+        onClose={() => setIsDbModalOpen(false)}
       />
 
       {/* Toast Notification Alert */}

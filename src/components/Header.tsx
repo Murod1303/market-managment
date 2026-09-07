@@ -15,6 +15,7 @@ import {
   X,
   ChevronRight,
   Globe,
+  Database,
 } from 'lucide-react';
 import { AuthUser } from '../types';
 import { useLanguage, LanguageSwitcher } from '../i18n/LanguageContext';
@@ -25,6 +26,7 @@ interface HeaderProps {
   onOpenExcelModal: () => void;
   onOpenStatsModal: () => void;
   onOpenTelegramModal: () => void;
+  onOpenDbModal?: () => void;
   onOpenQuickSearch: () => void;
   isTelegramWebAppView: boolean;
   onToggleTelegramView: () => void;
@@ -38,6 +40,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenExcelModal,
   onOpenStatsModal,
   onOpenTelegramModal,
+  onOpenDbModal,
   onOpenQuickSearch,
   isTelegramWebAppView,
   onToggleTelegramView,
@@ -170,6 +173,19 @@ export const Header: React.FC<HeaderProps> = ({
               <MessageSquare className="w-4 h-4 text-sky-400" />
               <span>{t('telegramBotBtn')}</span>
             </button>
+
+            {/* MongoDB Database Button */}
+            {onOpenDbModal && (
+              <button
+                id="btn-database-modal"
+                onClick={onOpenDbModal}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:border-emerald-500/50 transition shrink-0 whitespace-nowrap"
+                title="MongoDB Ma'lumotlar Bazasi Holati"
+              >
+                <Database className="w-4 h-4 text-emerald-400" />
+                <span>MongoDB</span>
+              </button>
+            )}
 
             {/* Telegram WebApp Mode Toggle */}
             <button
@@ -466,6 +482,33 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
                 <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-sky-400 transition" />
               </button>
+
+              {/* 6b. MongoDB Database Status */}
+              {onOpenDbModal && (
+                <button
+                  id="btn-drawer-mongodb"
+                  onClick={() => {
+                    setIsMenuOpen(false);
+                    onOpenDbModal();
+                  }}
+                  className="flex items-center justify-between p-3 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 hover:border-emerald-500/50 text-left transition group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+                      <Database className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-semibold text-emerald-300">
+                        MongoDB Bazasi
+                      </div>
+                      <div className="text-xs text-emerald-400/80">
+                        Doimiy bulutli baza holati
+                      </div>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-emerald-400" />
+                </button>
+              )}
 
               {/* 7. Telegram WebApp View Mode Toggle */}
               <button
