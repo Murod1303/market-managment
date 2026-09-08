@@ -138,21 +138,21 @@ async function seedMongoIfEmpty(db: Db, defaultProducts: ProductDocument[], defa
   try {
     const productsColl = db.collection<ProductDocument>('products');
     const prodCount = await productsColl.countDocuments();
-    if (prodCount === 0) {
+    if (prodCount === 0 && defaultProducts.length > 0) {
       console.log(`[MongoDB] Seeding initial ${defaultProducts.length} products to "products" collection...`);
       await productsColl.insertMany(defaultProducts as any);
-      await productsColl.createIndex({ id: 1 }, { unique: true });
-      await productsColl.createIndex({ name: 'text', category: 'text' });
     }
+    await productsColl.createIndex({ id: 1 }, { unique: true }).catch(() => {});
+    await productsColl.createIndex({ name: 'text', category: 'text' }).catch(() => {});
 
     const usersColl = db.collection<UserDocument>('users');
     const userCount = await usersColl.countDocuments();
-    if (userCount === 0) {
+    if (userCount === 0 && defaultUsers.length > 0) {
       console.log(`[MongoDB] Seeding default users to "users" collection...`);
       await usersColl.insertMany(defaultUsers as any);
-      await usersColl.createIndex({ id: 1 }, { unique: true });
-      await usersColl.createIndex({ username: 1 }, { unique: true });
     }
+    await usersColl.createIndex({ id: 1 }, { unique: true }).catch(() => {});
+    await usersColl.createIndex({ username: 1 }, { unique: true }).catch(() => {});
 
     // Telegram sessions index
     const tgColl = db.collection<TelegramSessionDocument>('telegram_sessions');
@@ -246,6 +246,22 @@ export async function deleteDbProduct(id: string): Promise<boolean> {
   } catch (err) {
     console.error('[Storage] Error deleting from DB_FILE:', err);
     return false;
+  }
+}
+
+export async function clearDbProducts(): Promise<void> {
+  if (isConnected && mongoDb) {
+    try {
+      await mongoDb.collection<ProductDocument>('products').deleteMany({});
+    } catch (err) {
+      console.error('[MongoDB] Error clearing products from MongoDB:', err);
+    }
+  }
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(DB_FILE, JSON.stringify([], null, 2), 'utf-8');
+  } catch (err) {
+    console.error('[Storage] Error clearing DB_FILE:', err);
   }
 }
 

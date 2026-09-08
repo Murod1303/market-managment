@@ -241,8 +241,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             </div>
             <p className="leading-relaxed">
               {language === 'uz-cyrl'
-                ? "Telegram ботдан фойдаланишда ҳам /login admin admin123 буйруғи орқали рухсат олинади. Бот ичидан WebApp очилганда ҳам ушбу ҳисоб билан кирилади."
-                : "Telegram botdan foydalanishda ham /login admin admin123 buyrug'i orqali ruxsat olinadi. Bot ichidan WebApp ochilganda ham ushbu hisob bilan kiriladi."}
+                ? "Telegram ботдан фойдаланишда ҳам /login Admin123 Admin7778 буйруғи орқали рухсат олинади. Бот ичидан WebApp очилганда ҳам ушбу ҳисоб билан кирилади."
+                : "Telegram botdan foydalanishda ham /login Admin123 Admin7778 buyrug'i orqali ruxsat olinadi. Bot ichidan WebApp ochilganda ham ushbu hisob bilan kiriladi."}
             </p>
           </div>
         </div>

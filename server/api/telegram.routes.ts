@@ -33,7 +33,7 @@ router.post('/chat', async (req: Request, res: Response) => {
 
       if (!inputUser || !inputPass) {
         res.json({
-          reply: `🔑 <b>Avtorizatsiya formati:</b>\n\nIltimos, login va parolingizni kiriting:\n👉 <code>/login [login] [parol]</code>\n\n💡 <b>Namunaviy hisoblar:</b>\n• <code>/login admin admin123</code> (Boshqaruvchi)\n• <code>/login kassir kassa2026</code> (Kassir)`,
+          reply: `🔑 <b>Avtorizatsiya formati:</b>\n\nIltimos, login va parolingizni kiriting:\n👉 <code>/login [login] [parol]</code>\n\n💡 <b>Hisoblar:</b>\n• <code>/login Admin123 Admin7778</code> (Boshqaruvchi)\n• <code>/login kassir123 kassir7877</code> (Kassir)`,
           actionType: 'login_required',
           isAuthenticated: false,
         });

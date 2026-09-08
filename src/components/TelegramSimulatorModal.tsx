@@ -59,11 +59,11 @@ export const TelegramSimulatorModal: React.FC<TelegramSimulatorModalProps> = ({
     if (language === 'uz-cyrl') {
       return botSessionToken
         ? "👋 <b>Ассалому алайкум!</b>\nМен дўкон товарлари ва ҳисоб-китоблар ботиман.\n\n🛡️ <b>Сиз авторизациядан ўтгансиз</b>.\n\nТезкор буйруқлар:\n• <code>/new [номи] [миқдор] [бирлик] [таннарх] [устама]</code> — янги товар қўшиш\n• <code>/search [номи]</code> — товар нархи ва қолдиғи\n• <code>/statistika</code> — касса ва соф фойда\n• <code>/excel</code> — Excel жадвали\n• <code>/pdf</code> — A4 ҳисобот\n• <code>/webapp</code> — WebApp дўкон иловасини очиш\n• 📸 Чек расмини юбориш — AI таҳлил"
-        : "👋 <b>Ассалому алайкум!</b>\nМен <b>SmartSavdo</b> дўкон бошқарув ботиман.\n\n🔒 <b>Хавфсизлик талаби:</b> Маълумотларни кўриш ва амалларни бажариш учун аввал тизимга киринг:\n👉 <code>/login [логин] [парол]</code>\n\nМисол:\n• <code>/login admin admin123</code> (Бошқарувчи)\n• <code>/login kassir kassa2026</code> (Кассир)";
+        : "👋 <b>Ассалому алайкум!</b>\nМен <b>SmartSavdo</b> дўкон бошқарув ботиман.\n\n🔒 <b>Хавфсизлик талаби:</b> Маълумотларни кўриш ва амалларни бажариш учун аввал тизимга киринг:\n👉 <code>/login [логин] [парол]</code>\n\nҲисоблар:\n• <code>/login Admin123 Admin7778</code> (Бошқарувчи)\n• <code>/login kassir123 kassir7877</code> (Кассир)";
     }
     return botSessionToken
       ? "👋 <b>Assalomu alaykum!</b>\nMen do'kon tovarlari va hisob-kitoblar botiman.\n\n🛡️ <b>Siz avtorizatsiyadan o'tgansiz</b>.\n\nTezkor buyruqlar:\n• <code>/new [nomi] [miqdor] [birlik] [tannarx] [ustama]</code> — yangi tovar qo'shish\n• <code>/search [nomi]</code> — tovar narxi va qoldig'i\n• <code>/statistika</code> — kassa va sof foyda\n• <code>/excel</code> — Excel jadvali\n• <code>/pdf</code> — A4 hisobot\n• <code>/webapp</code> — WebApp do'kon ilovasini ochish\n• 📸 Chek rasmini yuborish — AI tahlil"
-      : "👋 <b>Assalomu alaykum!</b>\nMen <b>SmartSavdo</b> do'kon boshqaruv botiman.\n\n🔒 <b>Xavfsizlik talabi:</b> Ma'lumotlarni ko'rish va amallarni bajarish uchun avval tizimga kiring:\n👉 <code>/login [login] [parol]</code>\n\nMisol:\n• <code>/login admin admin123</code> (Boshqaruvchi)\n• <code>/login kassir kassa2026</code> (Kassir)";
+      : "👋 <b>Assalomu alaykum!</b>\nMen <b>SmartSavdo</b> do'kon boshqaruv botiman.\n\n🔒 <b>Xavfsizlik talabi:</b> Ma'lumotlarni ko'rish va amallarni bajarish uchun avval tizimga kiring:\n👉 <code>/login [login] [parol]</code>\n\nHisoblar:\n• <code>/login Admin123 Admin7778</code> (Boshqaruvchi)\n• <code>/login kassir123 kassir7877</code> (Kassir)";
   };
 
   const [messages, setMessages] = useState<TelegramMessage[]>([
@@ -559,16 +559,16 @@ export const TelegramSimulatorModal: React.FC<TelegramSimulatorModalProps> = ({
                       {msg.actionType === 'login_required' && (
                         <div className="mt-3 pt-2.5 border-t border-slate-800 flex flex-col sm:flex-row gap-2">
                           <button
-                            onClick={() => handleSendMessage('/login admin admin123')}
+                            onClick={() => handleSendMessage('/login Admin123 Admin7778')}
                             className="flex-1 py-2 px-2.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-semibold text-left sm:text-center transition"
                           >
-                            👑 Admin (/login admin admin123)
+                            👑 Admin (/login Admin123 Admin7778)
                           </button>
                           <button
-                            onClick={() => handleSendMessage('/login kassir kassa2026')}
+                            onClick={() => handleSendMessage('/login kassir123 kassir7877')}
                             className="flex-1 py-2 px-2.5 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 text-xs font-semibold text-left sm:text-center transition"
                           >
-                            👤 {language === 'uz-cyrl' ? 'Кассир' : 'Kassir'} (/login kassir kassa2026)
+                            👤 {language === 'uz-cyrl' ? 'Кассир' : 'Kassir'} (/login kassir123 kassir7877)
                           </button>
                         </div>
                       )}
@@ -636,8 +636,8 @@ export const TelegramSimulatorModal: React.FC<TelegramSimulatorModalProps> = ({
                     { label: '🔒 /logout', cmd: '/logout' },
                   ]
                 : [
-                    { label: '👑 /login admin', cmd: '/login admin admin123' },
-                    { label: '👤 /login kassir', cmd: '/login kassir kassa2026' },
+                    { label: '👑 /login Admin123', cmd: '/login Admin123 Admin7778' },
+                    { label: '👤 /login kassir123', cmd: '/login kassir123 kassir7877' },
                     { label: 'ℹ️ /help', cmd: '/help' },
                     { label: '👋 /start', cmd: '/start' },
                   ]
@@ -860,7 +860,7 @@ export const TelegramSimulatorModal: React.FC<TelegramSimulatorModalProps> = ({
                   (Ixtiyoriy) <code>TELEGRAM_BOT_MODE</code> = <code>polling</code> qilib qo'yishingiz mumkin.
                 </li>
                 <li>
-                  Railway loyihangiz <b>Deploy</b> bo'lgach, Telegramda botingizga kiring va <code>/start</code> yoki <code>/login admin admin123</code> yozing. Bot darhol javob beradi!
+                  Railway loyihangiz <b>Deploy</b> bo'lgach, Telegramda botingizga kiring va <code>/start</code> yoki <code>/login Admin123 Admin7778</code> yozing. Bot darhol javob beradi!
                 </li>
               </ol>
             </div>

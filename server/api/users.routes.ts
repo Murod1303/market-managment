@@ -110,16 +110,16 @@ router.get('/demo-users', (req: Request, res: Response) => {
   res.json({
     demoAccounts: [
       {
-        username: 'admin',
+        username: 'Admin123',
         role: 'admin',
         roleTitle: "Do'kon Egasi / Boshqaruvchi",
-        passwordHint: 'admin123',
+        passwordHint: 'Admin7778',
       },
       {
-        username: 'kassir',
+        username: 'kassir123',
         role: 'cashier',
         roleTitle: 'Kassir / Hisobchi',
-        passwordHint: 'kassa2026',
+        passwordHint: 'kassir7877',
       },
     ],
   });

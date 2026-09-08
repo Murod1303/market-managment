@@ -123,7 +123,7 @@ export default function App() {
       const res = await fetch('/api/products', { headers });
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data.products) && data.products.length > 0) {
+        if (Array.isArray(data.products)) {
           setProducts(data.products);
         }
       }

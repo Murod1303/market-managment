@@ -156,7 +156,7 @@ export async function processTelegramUpdate(update: any, botToken: string): Prom
     if (!session) {
       await telegramClient.sendMessage(
         chatId,
-        `🔒 <b>Ruxsat etilmadi!</b>\nChek yoki tovar rasmini yuklashdan oldin tizimga kiring:\n👉 <code>/login [login] [parol]</code>\n\nMisol: /login admin admin123`,
+        `🔒 <b>Ruxsat etilmadi!</b>\nChek yoki tovar rasmini yuklashdan oldin tizimga kiring:\n👉 <code>/login [login] [parol]</code>\n\nMisol: /login Admin123 Admin7778`,
         { reply_markup: getMainKeyboard(false) }
       );
       return;
@@ -242,7 +242,7 @@ export async function processTelegramUpdate(update: any, botToken: string): Prom
       const appUrl = getPublicAppUrl() || 'https://aistudio.google.com';
       responseText = `✅ <b>Avtorizatsiya muvaffaqiyatli!</b>\n\nXush kelibsiz, <b>${fullUser.name}</b> (${fullUser.roleTitle})!\n\n📱 <b>SmartSavdo WebApp:</b>\n<a href="${appUrl}?auth_token=${authResult.token}">Do'kon WebApp Ilovasini Ochish</a>\n\nEndi buyruqlar faol:\n➕ /new [nomi] [miqdor] [birlik] [tannarx] [ustama]\n📸 Chek yoki tovar rasmini yuboring\n🔎 /search [nomi]\n📊 /statistika\n📑 /excel\n🔒 /logout`;
     } else {
-      responseText = `❌ <b>Login yoki parol noto'g'ri!</b>\nQaytadan kiriting: /login [login] [parol]\nMasalan: /login admin admin123`;
+      responseText = `❌ <b>Login yoki parol noto'g'ri!</b>\nQaytadan kiriting: /login [login] [parol]\nMasalan: /login Admin123 Admin7778`;
     }
   } else if (text === '/logout' || text === '🔒 Chiqish') {
     if (session) {
@@ -251,7 +251,7 @@ export async function processTelegramUpdate(update: any, botToken: string): Prom
     }
     responseText = `🔒 <b>Tizimdan chiqildi.</b>\nQayta kirish: /login [login] [parol]`;
   } else if (!session) {
-    responseText = `🔒 <b>SmartSavdo Xavfsizlik Tizimi:</b>\nDo'kon ma'lumotlarini ko'rish uchun avval avtorizatsiyadan o'ting:\n\n👉 <code>/login [login] [parol]</code>\n\nMisol:\n• <code>/login admin admin123</code> (Admin)\n• <code>/login kassir kassa2026</code> (Kassir)`;
+    responseText = `🔒 <b>SmartSavdo Xavfsizlik Tizimi:</b>\nDo'kon ma'lumotlarini ko'rish uchun avval avtorizatsiyadan o'ting:\n\n👉 <code>/login [login] [parol]</code>\n\nHisoblar:\n• <code>/login Admin123 Admin7778</code> (Admin)\n• <code>/login kassir123 kassir7877</code> (Kassir)`;
   } else {
     // Check if user is replying with a markup percentage for pending photo
     const isMarkupInput =

@@ -1,0 +1,18 @@
+[
+  {
+    "id": "user-admin",
+    "username": "Admin123",
+    "password": "$2b$10$yXgs27QLUfYFWGtDAk8HEe2fZ9x.WsTzYO0ikYmDJ3uQH4LOQmXdu",
+    "name": "Boshqaruvchi (Admin)",
+    "role": "admin",
+    "roleTitle": "Do'kon Egasi / Boshqaruvchi"
+  },
+  {
+    "id": "user-cashier",
+    "username": "kassir123",
+    "password": "$2b$10$w59sCGh2w6pUZ4ZUcummFeqKdSWIetI5GhrDBFPsAicu0IJSzdf0C",
+    "name": "Kassir-Operator",
+    "role": "cashier",
+    "roleTitle": "Kassir / Hisobchi"
+  }
+]

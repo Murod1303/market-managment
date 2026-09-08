@@ -4,6 +4,7 @@ import {
   pingMongoDatabase,
   getDbProducts,
   getDbUsers,
+  clearDbProducts,
 } from '../mongodb.ts';
 import { productService } from './product.service.ts';
 import { userService } from './user.service.ts';
@@ -19,17 +20,23 @@ export const databaseService = {
         const mongoUsers = await getDbUsers(defaultUsers);
 
         if (mongoProducts.length > 0) {
-          productService.setAll(
-            mongoProducts.map((p) => ({
-              ...p,
-              supplier: p.supplier || "Do'kon ombori",
-            }))
-          );
+          const isStaleDemo = mongoProducts.every((p) => p.id.startsWith('prod-'));
+          if (defaultProducts.length === 0 && isStaleDemo) {
+            await clearDbProducts();
+            productService.setAll([]);
+          } else {
+            productService.setAll(
+              mongoProducts.map((p) => ({
+                ...p,
+                supplier: p.supplier || "Do'kon ombori",
+              }))
+            );
+          }
         }
         if (mongoUsers.length > 0) {
           userService.setAll(mongoUsers);
         }
-        console.log(`[MongoDB] Initialized! Synced ${mongoProducts.length} products & ${mongoUsers.length} users.`);
+        console.log(`[MongoDB] Initialized! Synced ${productService.getAll().length} products & ${mongoUsers.length} users.`);
       }
       return isMongoReady;
     } catch (err) {
