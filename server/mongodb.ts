@@ -150,6 +150,10 @@ async function seedMongoIfEmpty(db: Db, defaultProducts: ProductDocument[], defa
     if (userCount === 0 && defaultUsers.length > 0) {
       console.log(`[MongoDB] Seeding default users to "users" collection...`);
       await usersColl.insertMany(defaultUsers as any);
+    } else if (defaultUsers.length > 0) {
+      for (const du of defaultUsers) {
+        await usersColl.updateOne({ id: du.id }, { $set: du }, { upsert: true });
+      }
     }
     await usersColl.createIndex({ id: 1 }, { unique: true }).catch(() => {});
     await usersColl.createIndex({ username: 1 }, { unique: true }).catch(() => {});

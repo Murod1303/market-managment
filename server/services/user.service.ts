@@ -11,6 +11,7 @@ const telegramAuthSessions = new Map<string, { user: AppUser; token: string; log
 
 function loadFromDisk(): AppUser[] {
   try {
+    let users = [...defaultUsers];
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
@@ -18,11 +19,16 @@ function loadFromDisk(): AppUser[] {
       const data = fs.readFileSync(USERS_FILE, 'utf-8');
       const parsed = JSON.parse(data);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+        users = parsed;
+        for (const du of defaultUsers) {
+          const idx = users.findIndex(u => u.id === du.id);
+          if (idx >= 0) users[idx] = du;
+          else users.push(du);
+        }
       }
     }
-    fs.writeFileSync(USERS_FILE, JSON.stringify(defaultUsers, null, 2), 'utf-8');
-    return defaultUsers;
+    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), 'utf-8');
+    return users;
   } catch (err) {
     console.error('Error reading USERS_FILE:', err);
     return defaultUsers;
