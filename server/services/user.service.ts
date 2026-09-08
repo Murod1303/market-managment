@@ -3,6 +3,7 @@ import { DATA_DIR, USERS_FILE } from '../config/paths.ts';
 import { defaultUsers } from '../data/default-users.ts';
 import { AppUser, SafeUser } from '../types/index.ts';
 import { upsertDbUser as upsertToMongo } from '../mongodb.ts';
+import bcrypt from 'bcryptjs';
 
 let usersCache: AppUser[] = [];
 const activeTokens = new Map<string, { user: AppUser; expiresAt: number }>();
@@ -79,7 +80,7 @@ export const userService = {
 
   authenticate(username: string, password: string): { user: SafeUser; token: string } | null {
     const user = this.getByUsername(username);
-    if (!user || user.password !== password) {
+    if (!user || !bcrypt.compareSync(password, user.password)) {
       return null;
     }
     const token = generateToken(user.id);
@@ -103,6 +104,7 @@ export const userService = {
     const newUser: AppUser = {
       ...data,
       id: data.id || `user-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      password: bcrypt.hashSync(data.password, 10),
     };
     usersCache = [...usersCache, newUser];
     persistUsers(usersCache);
@@ -114,6 +116,10 @@ export const userService = {
     if (index === -1) return null;
 
     const updated = { ...usersCache[index], ...updates };
+    if (updates.password && updates.password !== usersCache[index].password) {
+      updated.password = bcrypt.hashSync(updates.password, 10);
+    }
+    
     usersCache[index] = updated;
     persistUsers(usersCache);
     return sanitizeUser(updated);
@@ -121,8 +127,8 @@ export const userService = {
 
   changePassword(userId: string, oldPass: string, newPass: string): boolean {
     const user = this.getById(userId);
-    if (!user || user.password !== oldPass) return false;
-    user.password = newPass;
+    if (!user || !bcrypt.compareSync(oldPass, user.password)) return false;
+    user.password = bcrypt.hashSync(newPass, 10);
     persistUsers(usersCache);
     return true;
   },

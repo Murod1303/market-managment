@@ -81,12 +81,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     }
   };
 
-  const handleQuickLogin = (u: string, p: string) => {
-    setUsername(u);
-    setPassword(p);
-    handleSubmit(undefined, u, p);
-  };
-
   return (
     <div
       id="login-screen-container"
@@ -232,54 +226,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
               )}
             </button>
           </form>
-
-          {/* Quick Demo Accounts Bento Card */}
-          <div className="mt-6 pt-5 border-t border-slate-800/80">
-            <p className="text-xs font-medium text-slate-400 mb-3 flex items-center justify-between">
-              <span>{t('quickAccounts')}</span>
-              <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
-                {language === 'uz-cyrl' ? '1 босишда' : '1 bosishda'}
-              </span>
-            </p>
-
-            <div className="grid grid-cols-2 gap-2.5">
-              <button
-                id="btn-quick-login-admin"
-                type="button"
-                onClick={() => handleQuickLogin('admin', 'admin123')}
-                className="p-3 rounded-2xl bg-slate-950/60 hover:bg-slate-800 border border-slate-800 hover:border-emerald-500/50 text-left transition group"
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-bold text-slate-200 group-hover:text-emerald-400 transition">
-                    👑 {language === 'uz-cyrl' ? 'Бошқарувчи' : 'Boshqaruvchi'}
-                  </span>
-                  <CheckCircle2 className="w-3.5 h-3.5 text-slate-500 group-hover:text-emerald-400" />
-                </div>
-                <div className="text-[11px] text-slate-400">admin</div>
-                <div className="text-[10px] text-slate-500 font-mono">
-                  {language === 'uz-cyrl' ? 'парол:' : 'parol:'} admin123
-                </div>
-              </button>
-
-              <button
-                id="btn-quick-login-cashier"
-                type="button"
-                onClick={() => handleQuickLogin('kassir', 'kassa2026')}
-                className="p-3 rounded-2xl bg-slate-950/60 hover:bg-slate-800 border border-slate-800 hover:border-sky-500/50 text-left transition group"
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-bold text-slate-200 group-hover:text-sky-400 transition">
-                    👤 {language === 'uz-cyrl' ? 'Кассир-Оператор' : 'Kassir-Operator'}
-                  </span>
-                  <CheckCircle2 className="w-3.5 h-3.5 text-slate-500 group-hover:text-sky-400" />
-                </div>
-                <div className="text-[11px] text-slate-400">kassir</div>
-                <div className="text-[10px] text-slate-500 font-mono">
-                  {language === 'uz-cyrl' ? 'парол:' : 'parol:'} kassa2026
-                </div>
-              </button>
-            </div>
-          </div>
         </div>
 
         {/* Telegram Bot Security Hint Bento Card */}

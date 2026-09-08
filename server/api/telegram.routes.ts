@@ -121,7 +121,8 @@ router.post('/chat', async (req: Request, res: Response) => {
       isAuthenticated: true,
     });
   } catch (err: any) {
-    res.status(500).json({ error: 'Xatolik: ' + err.message });
+    console.error('Telegram Chat Simulator Error:', err);
+    res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
   }
 });
 

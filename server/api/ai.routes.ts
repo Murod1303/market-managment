@@ -1,8 +1,14 @@
 import { Router, Request, Response } from 'express';
 import { GoogleGenAI, Type } from '@google/genai';
 import { env } from '../config/env.ts';
+import { z } from 'zod';
 
 const router = Router();
+
+const scanReceiptSchema = z.object({
+  imageBase64: z.string().min(1, 'Rasm yuborilmadi (imageBase64 talab qilinadi)'),
+  mimeType: z.string().optional().default('image/jpeg'),
+});
 
 function getGeminiClient(): GoogleGenAI | null {
   const apiKey = env.GEMINI_API_KEY;
@@ -19,12 +25,8 @@ function getGeminiClient(): GoogleGenAI | null {
 
 router.post('/scan-receipt', async (req: Request, res: Response) => {
   try {
-    const { imageBase64, mimeType = 'image/jpeg' } = req.body;
-
-    if (!imageBase64) {
-      res.status(400).json({ error: 'Rasm yuborilmadi (imageBase64 talab qilinadi)' });
-      return;
-    }
+    const validatedData = scanReceiptSchema.parse(req.body);
+    const { imageBase64, mimeType } = validatedData;
 
     const cleanBase64 = imageBase64.includes('base64,')
       ? imageBase64.split('base64,')[1]
@@ -159,10 +161,14 @@ Agar ma'lumot noaniq bo'lsa, mantiqiy taxmin qiling.`;
     const parsedJson = JSON.parse(response.text || '{}');
     res.json({ result: parsedJson });
   } catch (error: any) {
-    console.error('Gemini Vision Scanner Error:', error);
-    res.status(500).json({
-      error: 'Rasm tahlil qilishda xatolik yuz berdi: ' + (error.message || "Noma'lum xatolik"),
-    });
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: error.errors[0].message });
+    } else {
+      console.error('Gemini Vision Scanner Error:', error);
+      res.status(500).json({
+        error: 'Serverda xatolik yuz berdi',
+      });
+    }
   }
 });
 

@@ -9,7 +9,8 @@ router.get('/status', (req: Request, res: Response) => {
     const diag = databaseService.getStatus();
     res.json(diag);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error('Database Status Error:', err);
+    res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
   }
 });
 
@@ -19,7 +20,8 @@ router.get('/ping', async (req: Request, res: Response) => {
     const result = await databaseService.ping();
     res.json(result);
   } catch (err: any) {
-    res.status(500).json({ ok: false, connected: false, error: err.message });
+    console.error('Database Ping Error:', err);
+    res.status(500).json({ ok: false, connected: false, error: 'Serverda xatolik yuz berdi' });
   }
 });
 
@@ -29,7 +31,8 @@ router.post('/sync', async (req: Request, res: Response) => {
     const success = await databaseService.sync();
     res.json({ success, message: success ? "Muvaffaqiyatli sinxronizatsiya qilindi" : "Sinxronizatsiyada xatolik" });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+    console.error('Database Sync Error:', err);
+    res.status(500).json({ success: false, error: 'Serverda xatolik yuz berdi' });
   }
 });
 
