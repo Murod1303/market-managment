@@ -120,6 +120,23 @@ export interface Translations {
   avgLabel: string;
   revenueLabel: string;
   guaranteedProfit: string;
+  dateFilterLabel: string;
+  dateAll: string;
+  dateToday: string;
+  dateYesterday: string;
+  dateLast7Days: string;
+  dateSingle: string;
+  dateRange: string;
+  dateFrom: string;
+  dateTo: string;
+  dateClear: string;
+  sortByDateDesc: string;
+  sortByDateAsc: string;
+  itemsPerPage: string;
+  showingItems: string;
+  ofTotal: string;
+  page: string;
+  allOption: string;
 
   // Add / Edit Product Modal
   modalNewProductTitle: string;
@@ -378,6 +395,23 @@ export const translations: Record<Language, Translations> = {
     avgLabel: "O'rtacha:",
     revenueLabel: 'Tushum:',
     guaranteedProfit: 'Sof foyda kafolatlangan',
+    dateFilterLabel: "Sana bo'yicha saralash:",
+    dateAll: 'Barchasi',
+    dateToday: 'Bugun',
+    dateYesterday: 'Kecha',
+    dateLast7Days: 'Oxirgi 7 kun',
+    dateSingle: 'Aniq bir kun',
+    dateRange: "Sana oralig'i",
+    dateFrom: 'Dan:',
+    dateTo: 'Gacha:',
+    dateClear: 'Tozalash',
+    sortByDateDesc: 'Sana: Yangilar birinchi',
+    sortByDateAsc: 'Sana: Eskilar birinchi',
+    itemsPerPage: 'Har sahifada:',
+    showingItems: "Ko'rsatilmoqda:",
+    ofTotal: 'dan',
+    page: 'Sahifa',
+    allOption: 'Barchasi',
 
     // Add / Edit Product Modal
     modalNewProductTitle: 'Yangi Tovar Kiritish',
@@ -634,6 +668,23 @@ export const translations: Record<Language, Translations> = {
     avgLabel: 'Ўртача:',
     revenueLabel: 'Тушум:',
     guaranteedProfit: 'Соф фойда кафолатланган',
+    dateFilterLabel: 'Сана бўйича саралаш:',
+    dateAll: 'Барчаси',
+    dateToday: 'Бугун',
+    dateYesterday: 'Кеча',
+    dateLast7Days: 'Охирги 7 кун',
+    dateSingle: 'Аниқ бир кун',
+    dateRange: 'Сана оралиғи',
+    dateFrom: 'Дан:',
+    dateTo: 'Гача:',
+    dateClear: 'Тозалаш',
+    sortByDateDesc: 'Сана: Янгилар биринчи',
+    sortByDateAsc: 'Сана: Эскилар биринчи',
+    itemsPerPage: 'Ҳар саҳифада:',
+    showingItems: 'Кўрсатилмоқда:',
+    ofTotal: 'дан',
+    page: 'Саҳифа',
+    allOption: 'Барчаси',
 
     // Add / Edit Product Modal
     modalNewProductTitle: 'Янги Товар Кириcolumnтиш',

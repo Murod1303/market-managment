@@ -80,93 +80,122 @@ Har bir kelgan tovar nomi (O'zbek yoki Rus tilida), uning o'lchov birligi (kg, d
 Barcha narxlar va miqdorlar faqat raqam bo'lsin.
 Agar ma'lumot noaniq bo'lsa, mantiqiy taxmin qiling.`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: {
-        parts: [
-          {
-            inlineData: {
-              mimeType,
-              data: cleanBase64,
-            },
+    const candidateModels = ['gemini-2.5-flash', 'gemini-3.1-flash-lite', 'gemini-3.8-flash'];
+    let lastError: any = null;
+    let rawText = '';
+
+    for (const modelName of candidateModels) {
+      try {
+        const response = await ai.models.generateContent({
+          model: modelName,
+          contents: {
+            parts: [
+              {
+                inlineData: {
+                  mimeType,
+                  data: cleanBase64,
+                },
+              },
+              { text: prompt },
+            ],
           },
-          { text: prompt },
-        ],
-      },
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            supplier: {
-              type: Type.STRING,
-              description: "Ta'minotchi tashkilot yoki do'kon nomi",
-            },
-            date: {
-              type: Type.STRING,
-              description: 'Faktura sanasi (YYYY-MM-DD)',
-            },
-            invoiceNumber: {
-              type: Type.STRING,
-              description: 'Faktura yoki chek raqami',
-            },
-            totalInvoiceAmount: {
-              type: Type.NUMBER,
-              description: 'Fakturaning umumiy jami summasi',
-            },
-            notes: {
-              type: Type.STRING,
-              description: "Qo'shimcha izoh yoki xulosa",
-            },
-            items: {
-              type: Type.ARRAY,
-              description: "Kelgan tovarlar ro'yxati",
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  name: {
-                    type: Type.STRING,
-                    description: 'Tovar nomi',
-                  },
-                  category: {
-                    type: Type.STRING,
-                    description: "Tovar kategoriyasi (masalan: Oziq-ovqat, Ichimliklar, Meva-Sabzavot, Sut mahsulotlari, Xo'jalik)",
-                  },
-                  quantity: {
-                    type: Type.NUMBER,
-                    description: 'Kelgan tovar miqdori',
-                  },
-                  unit: {
-                    type: Type.STRING,
-                    description: 'Birligi (kg, dona, litr, qop, quti, pachka, banka)',
-                  },
-                  unitCost: {
-                    type: Type.NUMBER,
-                    description: "1 birlik tannarxi so'mda",
-                  },
-                  totalCost: {
-                    type: Type.NUMBER,
-                    description: 'Jami tovar summasi (miqdor * narx)',
+          config: {
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                supplier: {
+                  type: Type.STRING,
+                  description: "Ta'minotchi tashkilot yoki do'kon nomi",
+                },
+                date: {
+                  type: Type.STRING,
+                  description: 'Faktura sanasi (YYYY-MM-DD)',
+                },
+                invoiceNumber: {
+                  type: Type.STRING,
+                  description: 'Faktura yoki chek raqami',
+                },
+                totalInvoiceAmount: {
+                  type: Type.NUMBER,
+                  description: 'Fakturaning umumiy jami summasi',
+                },
+                notes: {
+                  type: Type.STRING,
+                  description: "Qo'shimcha izoh yoki xulosa",
+                },
+                items: {
+                  type: Type.ARRAY,
+                  description: "Kelgan tovarlar ro'yxati",
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      name: {
+                        type: Type.STRING,
+                        description: 'Tovar nomi',
+                      },
+                      category: {
+                        type: Type.STRING,
+                        description: "Tovar kategoriyasi (masalan: Oziq-ovqat, Ichimliklar, Meva-Sabzavot, Sut mahsulotlari, Xo'jalik)",
+                      },
+                      quantity: {
+                        type: Type.NUMBER,
+                        description: 'Kelgan tovar miqdori',
+                      },
+                      unit: {
+                        type: Type.STRING,
+                        description: 'Birligi (kg, dona, litr, qop, quti, pachka, banka)',
+                      },
+                      unitCost: {
+                        type: Type.NUMBER,
+                        description: "1 birlik tannarxi so'mda",
+                      },
+                      totalCost: {
+                        type: Type.NUMBER,
+                        description: 'Jami tovar summasi (miqdor * narx)',
+                      },
+                    },
+                    required: ['name', 'quantity', 'unit', 'unitCost'],
                   },
                 },
-                required: ['name', 'quantity', 'unit', 'unitCost'],
               },
+              required: ['supplier', 'items'],
             },
           },
-          required: ['supplier', 'items'],
-        },
-      },
-    });
+        });
 
-    const parsedJson = JSON.parse(response.text || '{}');
+        rawText = response.text || '';
+        if (rawText) {
+          break;
+        }
+      } catch (err: any) {
+        console.warn(`Model ${modelName} failed, trying next:`, err?.message || err);
+        lastError = err;
+      }
+    }
+
+    if (!rawText) {
+      throw lastError || new Error('Barcha AI modellari band yoki javob bermadi');
+    }
+
+    let cleanJson = rawText.trim();
+    if (cleanJson.startsWith('```')) {
+      cleanJson = cleanJson.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+    }
+
+    const parsedJson = JSON.parse(cleanJson || '{}');
     res.json({ result: parsedJson });
   } catch (error: any) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: error.errors[0].message });
+      res.status(400).json({ error: error.issues[0]?.message || 'Noto\'g\'ri ma\'lumot' });
     } else {
       console.error('Gemini Vision Scanner Error:', error);
+      const isHighDemand = error?.message?.includes('high demand') || error?.status === 503;
+      const userMsg = isHighDemand
+        ? "AI xizmatida yuqori yuklama mavjud. Iltimos, bir ozdan so'ng qayta urinib ko'ring."
+        : "Rasm tahlil qilishda xatolik yuz berdi. Iltimos, qayta urinib ko'ring yoki faktura namunalaridan foydalaning.";
       res.status(500).json({
-        error: 'Serverda xatolik yuz berdi',
+        error: userMsg,
       });
     }
   }

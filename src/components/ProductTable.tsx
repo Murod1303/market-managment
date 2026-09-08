@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Search,
   Filter,
@@ -8,9 +8,19 @@ import {
   Square,
   Sparkles,
   ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
   Plus,
   RefreshCw,
   Info,
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  X,
+  Clock,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { Product } from '../types';
 import { calculateProductMetrics, formatNumber, formatSom } from '../utils/formatters';
@@ -26,6 +36,8 @@ interface ProductTableProps {
   onOpenScanner: () => void;
   onViewProductDetails?: (product: Product) => void;
 }
+
+type DateFilterMode = 'all' | 'today' | 'yesterday' | 'last7' | 'single' | 'range';
 
 export const ProductTable: React.FC<ProductTableProps> = ({
   products,
@@ -46,6 +58,48 @@ export const ProductTable: React.FC<ProductTableProps> = ({
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [internalDetailProduct, setInternalDetailProduct] = useState<Product | null>(null);
 
+  // Date Filtering State
+  const [dateFilterMode, setDateFilterMode] = useState<DateFilterMode>('all');
+  const [singleDate, setSingleDate] = useState<string>('');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
+
+  // Pagination State
+  const [pageSize, setPageSize] = useState<number | 'all'>(10);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+
+  // Date helper functions
+  const getTodayStr = () => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const getYesterdayStr = () => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const getDaysAgoStr = (days: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() - days);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  // Reset to page 1 on any filter or sort change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedCategory, dateFilterMode, singleDate, startDate, endDate, sortField, sortDirection, pageSize]);
+
   const handleRowClick = (product: Product) => {
     if (onViewProductDetails) {
       onViewProductDetails(product);
@@ -60,6 +114,38 @@ export const ProductTable: React.FC<ProductTableProps> = ({
     return ['Barchasi', ...Array.from(set)];
   }, [products]);
 
+  // Is custom date filter active
+  const isDateFilterActive =
+    dateFilterMode !== 'all' || Boolean(singleDate) || Boolean(startDate) || Boolean(endDate);
+
+  // Clear date filter
+  const clearDateFilter = () => {
+    setDateFilterMode('all');
+    setSingleDate('');
+    setStartDate('');
+    setEndDate('');
+  };
+
+  // Set single date mode with default if empty
+  const handleSelectSingleDateMode = () => {
+    setDateFilterMode('single');
+    if (!singleDate) {
+      const latest = products.length > 0 ? products[0].date : getTodayStr();
+      setSingleDate(latest || getTodayStr());
+    }
+  };
+
+  // Set date range mode with default if empty
+  const handleSelectRangeMode = () => {
+    setDateFilterMode('range');
+    if (!startDate && !endDate) {
+      const today = getTodayStr();
+      const firstDayOfMonth = today.slice(0, 8) + '01';
+      setStartDate(firstDayOfMonth);
+      setEndDate(today);
+    }
+  };
+
   // Filtered & Sorted Products
   const filteredProducts = useMemo(() => {
     return products
@@ -72,13 +158,37 @@ export const ProductTable: React.FC<ProductTableProps> = ({
           p.name.toLowerCase().includes(q) ||
           (p.supplier && p.supplier.toLowerCase().includes(q)) ||
           p.category.toLowerCase().includes(q);
-        return matchesCategory && matchesSearch;
+
+        let matchesDate = true;
+        if (dateFilterMode === 'today') {
+          matchesDate = p.date === getTodayStr();
+        } else if (dateFilterMode === 'yesterday') {
+          matchesDate = p.date === getYesterdayStr();
+        } else if (dateFilterMode === 'last7') {
+          const sevenDaysAgo = getDaysAgoStr(7);
+          const today = getTodayStr();
+          matchesDate = p.date >= sevenDaysAgo && p.date <= today;
+        } else if (dateFilterMode === 'single') {
+          matchesDate = !singleDate || p.date === singleDate;
+        } else if (dateFilterMode === 'range') {
+          const matchesStart = !startDate || p.date >= startDate;
+          const matchesEnd = !endDate || p.date <= endDate;
+          matchesDate = matchesStart && matchesEnd;
+        }
+
+        return matchesCategory && matchesSearch && matchesDate;
       })
       .sort((a, b) => {
         let valA: any = a[sortField as keyof Product];
         let valB: any = b[sortField as keyof Product];
 
-        if (sortField === 'totalCost') {
+        if (sortField === 'date') {
+          valA = a.date || '';
+          valB = b.date || '';
+          return sortDirection === 'asc'
+            ? valA.localeCompare(valB)
+            : valB.localeCompare(valA);
+        } else if (sortField === 'totalCost') {
           valA = a.quantity * a.unitCost;
           valB = b.quantity * b.unitCost;
         } else if (sortField === 'expectedProfit') {
@@ -95,9 +205,9 @@ export const ProductTable: React.FC<ProductTableProps> = ({
         }
         return sortDirection === 'asc' ? (valA || 0) - (valB || 0) : (valB || 0) - (valA || 0);
       });
-  }, [products, searchQuery, selectedCategory, sortField, sortDirection]);
+  }, [products, searchQuery, selectedCategory, dateFilterMode, singleDate, startDate, endDate, sortField, sortDirection]);
 
-  // Total summary calculations
+  // Total summary calculations (across all filtered products)
   const totals = useMemo(() => {
     let cost = 0;
     let revenue = 0;
@@ -127,12 +237,31 @@ export const ProductTable: React.FC<ProductTableProps> = ({
     };
   }, [filteredProducts]);
 
+  // Pagination Calculations
+  const totalPages = useMemo(() => {
+    if (pageSize === 'all') return 1;
+    return Math.max(1, Math.ceil(filteredProducts.length / Number(pageSize)));
+  }, [filteredProducts.length, pageSize]);
+
+  const validCurrentPage = Math.min(currentPage, totalPages);
+
+  const paginatedProducts = useMemo(() => {
+    if (pageSize === 'all') return filteredProducts;
+    const size = Number(pageSize);
+    const start = (validCurrentPage - 1) * size;
+    return filteredProducts.slice(start, start + size);
+  }, [filteredProducts, validCurrentPage, pageSize]);
+
   // Selection handlers
   const handleSelectAll = () => {
-    if (selectedIds.length === filteredProducts.length) {
-      setSelectedIds([]);
+    const currentIds = paginatedProducts.map((p) => p.id);
+    const allCurrentSelected =
+      currentIds.length > 0 && currentIds.every((id) => selectedIds.includes(id));
+
+    if (allCurrentSelected) {
+      setSelectedIds((prev) => prev.filter((id) => !currentIds.includes(id)));
     } else {
-      setSelectedIds(filteredProducts.map((p) => p.id));
+      setSelectedIds((prev) => Array.from(new Set([...prev, ...currentIds])));
     }
   };
 
@@ -160,8 +289,34 @@ export const ProductTable: React.FC<ProductTableProps> = ({
       setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
     } else {
       setSortField(field);
-      setSortDirection('desc');
+      setSortDirection(field === 'date' || field === 'expectedProfit' || field === 'totalCost' ? 'desc' : 'asc');
     }
+  };
+
+  // Helper to render sort arrow in headers
+  const renderSortIndicator = (field: keyof Product | 'totalCost' | 'expectedProfit') => {
+    if (sortField !== field) {
+      return <ArrowUpDown className="w-3 h-3 text-slate-500 opacity-60 group-hover:opacity-100" />;
+    }
+    return sortDirection === 'asc' ? (
+      <ArrowUp className="w-3.5 h-3.5 text-emerald-400" />
+    ) : (
+      <ArrowDown className="w-3.5 h-3.5 text-emerald-400" />
+    );
+  };
+
+  // Smart page numbers calculation
+  const getPageNumbers = (current: number, total: number): (number | string)[] => {
+    if (total <= 7) {
+      return Array.from({ length: total }, (_, i) => i + 1);
+    }
+    if (current <= 4) {
+      return [1, 2, 3, 4, 5, '...', total];
+    }
+    if (current >= total - 3) {
+      return [1, '...', total - 4, total - 3, total - 2, total - 1, total];
+    }
+    return [1, '...', current - 1, current, current + 1, '...', total];
   };
 
   return (
@@ -246,6 +401,182 @@ export const ProductTable: React.FC<ProductTableProps> = ({
           </div>
         </div>
 
+        {/* Date Filter and Quick Sort Row */}
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 pt-2 border-t border-slate-800/60">
+          {/* Left: Date Filtering Presets and Pickers */}
+          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+            <span className="text-xs text-slate-400 font-medium flex items-center gap-1.5 shrink-0 mr-1">
+              <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+              <span>{t('dateFilterLabel')}</span>
+            </span>
+
+            {/* Date Preset Buttons */}
+            <button
+              onClick={() => {
+                setDateFilterMode('all');
+                setSingleDate('');
+                setStartDate('');
+                setEndDate('');
+              }}
+              className={`px-2.5 py-1 rounded-xl text-xs font-medium transition ${
+                dateFilterMode === 'all'
+                  ? 'bg-emerald-500 text-slate-950 font-bold shadow-xs'
+                  : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700/80 border border-slate-700/60'
+              }`}
+            >
+              {t('dateAll')}
+            </button>
+
+            <button
+              onClick={() => setDateFilterMode('today')}
+              className={`px-2.5 py-1 rounded-xl text-xs font-medium transition ${
+                dateFilterMode === 'today'
+                  ? 'bg-emerald-500 text-slate-950 font-bold shadow-xs'
+                  : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700/80 border border-slate-700/60'
+              }`}
+            >
+              {t('dateToday')}
+            </button>
+
+            <button
+              onClick={() => setDateFilterMode('yesterday')}
+              className={`px-2.5 py-1 rounded-xl text-xs font-medium transition ${
+                dateFilterMode === 'yesterday'
+                  ? 'bg-emerald-500 text-slate-950 font-bold shadow-xs'
+                  : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700/80 border border-slate-700/60'
+              }`}
+            >
+              {t('dateYesterday')}
+            </button>
+
+            <button
+              onClick={() => setDateFilterMode('last7')}
+              className={`px-2.5 py-1 rounded-xl text-xs font-medium transition ${
+                dateFilterMode === 'last7'
+                  ? 'bg-emerald-500 text-slate-950 font-bold shadow-xs'
+                  : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700/80 border border-slate-700/60'
+              }`}
+            >
+              {t('dateLast7Days')}
+            </button>
+
+            <button
+              onClick={handleSelectSingleDateMode}
+              className={`px-2.5 py-1 rounded-xl text-xs font-medium transition ${
+                dateFilterMode === 'single'
+                  ? 'bg-emerald-500 text-slate-950 font-bold shadow-xs'
+                  : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700/80 border border-slate-700/60'
+              }`}
+            >
+              {t('dateSingle')}
+            </button>
+
+            <button
+              onClick={handleSelectRangeMode}
+              className={`px-2.5 py-1 rounded-xl text-xs font-medium transition ${
+                dateFilterMode === 'range'
+                  ? 'bg-emerald-500 text-slate-950 font-bold shadow-xs'
+                  : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700/80 border border-slate-700/60'
+              }`}
+            >
+              {t('dateRange')}
+            </button>
+
+            {/* Single Date Picker Input */}
+            {dateFilterMode === 'single' && (
+              <div className="flex items-center gap-1.5 ml-1 bg-slate-950 px-2 py-0.5 rounded-xl border border-emerald-500/50">
+                <input
+                  type="date"
+                  value={singleDate}
+                  onChange={(e) => setSingleDate(e.target.value)}
+                  className="bg-transparent text-slate-100 text-xs focus:outline-none font-mono py-0.5"
+                />
+              </div>
+            )}
+
+            {/* Date Range Picker Inputs */}
+            {dateFilterMode === 'range' && (
+              <div className="flex flex-wrap items-center gap-1.5 ml-1 bg-slate-950 px-2.5 py-1 rounded-xl border border-emerald-500/50">
+                <span className="text-[11px] text-slate-400 font-medium">{t('dateFrom')}:</span>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="bg-transparent text-slate-100 text-xs focus:outline-none font-mono py-0.5"
+                />
+                <span className="text-[11px] text-slate-400 font-medium ml-1">{t('dateTo')}:</span>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="bg-transparent text-slate-100 text-xs focus:outline-none font-mono py-0.5"
+                />
+              </div>
+            )}
+
+            {/* Clear button if active */}
+            {isDateFilterActive && (
+              <button
+                onClick={clearDateFilter}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-rose-400 hover:text-rose-300 bg-rose-950/40 hover:bg-rose-900/40 border border-rose-800/50 transition ml-1"
+                title={t('dateClear')}
+              >
+                <X className="w-3 h-3" />
+                <span>{t('dateClear')}</span>
+              </button>
+            )}
+          </div>
+
+          {/* Right: Quick Sort Dropdown */}
+          <div className="flex items-center gap-2 shrink-0 self-end lg:self-center">
+            <span className="text-xs text-slate-400 flex items-center gap-1">
+              <SlidersHorizontal className="w-3 h-3" />
+              <span>{language === 'uz-cyrl' ? 'Саралаш:' : 'Saralash:'}</span>
+            </span>
+            <select
+              value={`${sortField}_${sortDirection}`}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === 'date_desc') {
+                  setSortField('date');
+                  setSortDirection('desc');
+                } else if (val === 'date_asc') {
+                  setSortField('date');
+                  setSortDirection('asc');
+                } else if (val === 'expectedProfit_desc') {
+                  setSortField('expectedProfit');
+                  setSortDirection('desc');
+                } else if (val === 'totalCost_desc') {
+                  setSortField('totalCost');
+                  setSortDirection('desc');
+                } else if (val === 'name_asc') {
+                  setSortField('name');
+                  setSortDirection('asc');
+                } else if (val === 'quantity_desc') {
+                  setSortField('quantity');
+                  setSortDirection('desc');
+                }
+              }}
+              className="px-2.5 py-1 text-xs rounded-xl border border-slate-700/80 bg-slate-950 text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer font-medium"
+            >
+              <option value="date_desc">{t('sortByDateDesc')}</option>
+              <option value="date_asc">{t('sortByDateAsc')}</option>
+              <option value="expectedProfit_desc">
+                {language === 'uz-cyrl' ? 'Кутилган фойда (Кўпдан камга)' : "Kutilgan foyda (Ko'pdan kamga)"}
+              </option>
+              <option value="totalCost_desc">
+                {language === 'uz-cyrl' ? 'Жами харажат (Қимматдан)' : 'Jami xarajat (Qimmatdan)'}
+              </option>
+              <option value="name_asc">
+                {language === 'uz-cyrl' ? 'Номи (А-Я)' : 'Nomi (A-Z)'}
+              </option>
+              <option value="quantity_desc">
+                {language === 'uz-cyrl' ? 'Миқдори (Кўпдан камга)' : "Miqdori (Ko'pdan kamga)"}
+              </option>
+            </select>
+          </div>
+        </div>
+
         {/* Bulk Actions Panel (When items selected) */}
         {selectedIds.length > 0 && (
           <div
@@ -320,7 +651,7 @@ export const ProductTable: React.FC<ProductTableProps> = ({
                   className="text-slate-400 hover:text-slate-200"
                   title={t('selectAll')}
                 >
-                  {selectedIds.length > 0 && selectedIds.length === filteredProducts.length ? (
+                  {selectedIds.length > 0 && paginatedProducts.length > 0 && paginatedProducts.every((p) => selectedIds.includes(p.id)) ? (
                     <CheckSquare className="w-4 h-4 text-emerald-400" />
                   ) : (
                     <Square className="w-4 h-4" />
@@ -330,48 +661,58 @@ export const ProductTable: React.FC<ProductTableProps> = ({
               <th className="p-3 w-12 text-center text-slate-500">{t('colNo')}</th>
               <th
                 onClick={() => toggleSort('name')}
-                className="p-3 cursor-pointer hover:text-slate-200 select-none"
+                className="p-3 cursor-pointer hover:text-slate-200 select-none group"
               >
                 <div className="flex items-center gap-1">
-                  <span>{t('colName')}</span>
-                  <ArrowUpDown className="w-3 h-3 text-slate-500" />
+                  <span className={sortField === 'name' ? 'text-emerald-400 font-bold' : ''}>
+                    {t('colName')}
+                  </span>
+                  {renderSortIndicator('name')}
                 </div>
               </th>
               <th className="p-3">{t('colCategory')}</th>
               <th
                 onClick={() => toggleSort('quantity')}
-                className="p-3 text-right cursor-pointer hover:text-slate-200 select-none"
+                className="p-3 text-right cursor-pointer hover:text-slate-200 select-none group"
               >
                 <div className="flex items-center justify-end gap-1">
-                  <span>{t('colQuantity')}</span>
-                  <ArrowUpDown className="w-3 h-3 text-slate-500" />
+                  <span className={sortField === 'quantity' ? 'text-emerald-400 font-bold' : ''}>
+                    {t('colQuantity')}
+                  </span>
+                  {renderSortIndicator('quantity')}
                 </div>
               </th>
               <th
                 onClick={() => toggleSort('unitCost')}
-                className="p-3 text-right cursor-pointer hover:text-slate-200 select-none"
+                className="p-3 text-right cursor-pointer hover:text-slate-200 select-none group"
               >
                 <div className="flex items-center justify-end gap-1">
-                  <span>{t('colUnitCost')}</span>
-                  <ArrowUpDown className="w-3 h-3 text-slate-500" />
+                  <span className={sortField === 'unitCost' ? 'text-emerald-400 font-bold' : ''}>
+                    {t('colUnitCost')}
+                  </span>
+                  {renderSortIndicator('unitCost')}
                 </div>
               </th>
               <th
                 onClick={() => toggleSort('totalCost')}
-                className="p-3 text-right cursor-pointer hover:text-slate-200 select-none bg-slate-950/40"
+                className="p-3 text-right cursor-pointer hover:text-slate-200 select-none bg-slate-950/40 group"
               >
                 <div className="flex items-center justify-end gap-1">
-                  <span>{t('colTotalCost')}</span>
-                  <ArrowUpDown className="w-3 h-3 text-slate-500" />
+                  <span className={sortField === 'totalCost' ? 'text-emerald-400 font-bold' : ''}>
+                    {t('colTotalCost')}
+                  </span>
+                  {renderSortIndicator('totalCost')}
                 </div>
               </th>
               <th
                 onClick={() => toggleSort('markupPercent')}
-                className="p-3 text-center cursor-pointer hover:text-slate-200 select-none"
+                className="p-3 text-center cursor-pointer hover:text-slate-200 select-none group"
               >
                 <div className="flex items-center justify-center gap-1">
-                  <span>{t('colMarkup')}</span>
-                  <ArrowUpDown className="w-3 h-3 text-slate-500" />
+                  <span className={sortField === 'markupPercent' ? 'text-emerald-400 font-bold' : ''}>
+                    {t('colMarkup')}
+                  </span>
+                  {renderSortIndicator('markupPercent')}
                 </div>
               </th>
               <th className="p-3 text-right font-bold text-slate-200">
@@ -382,19 +723,30 @@ export const ProductTable: React.FC<ProductTableProps> = ({
               </th>
               <th
                 onClick={() => toggleSort('expectedProfit')}
-                className="p-3 text-right cursor-pointer hover:text-teal-200 select-none bg-teal-950/20 font-bold text-teal-300"
+                className="p-3 text-right cursor-pointer hover:text-teal-200 select-none bg-teal-950/20 font-bold text-teal-300 group"
               >
                 <div className="flex items-center justify-end gap-1">
                   <span>{t('colExpectedProfit')}</span>
-                  <ArrowUpDown className="w-3 h-3 text-teal-400" />
+                  {renderSortIndicator('expectedProfit')}
                 </div>
               </th>
-              <th className="p-3">{t('colDateSupplier')}</th>
+              <th
+                onClick={() => toggleSort('date')}
+                className="p-3 cursor-pointer hover:text-slate-200 select-none group"
+                title={language === 'uz-cyrl' ? 'Сана бўйича саралаш' : "Sana bo'yicha saralash"}
+              >
+                <div className="flex items-center gap-1">
+                  <span className={sortField === 'date' ? 'text-emerald-400 font-bold' : ''}>
+                    {t('colDateSupplier')}
+                  </span>
+                  {renderSortIndicator('date')}
+                </div>
+              </th>
               <th className="p-3 text-center w-20">{t('colActions')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800/60">
-            {filteredProducts.length === 0 ? (
+            {paginatedProducts.length === 0 ? (
               <tr>
                 <td colSpan={13} className="p-8 text-center text-slate-400">
                   <div className="max-w-xs mx-auto space-y-2">
@@ -406,7 +758,7 @@ export const ProductTable: React.FC<ProductTableProps> = ({
                 </td>
               </tr>
             ) : (
-              filteredProducts.map((product, idx) => {
+              paginatedProducts.map((product, idx) => {
                 const metrics = calculateProductMetrics(product);
                 const isSelected = selectedIds.includes(product.id);
 
@@ -440,7 +792,7 @@ export const ProductTable: React.FC<ProductTableProps> = ({
 
                     {/* Sequence Number */}
                     <td className="p-3 text-center text-slate-500 font-mono text-xs">
-                      {idx + 1}
+                      {(pageSize === 'all' ? 0 : (validCurrentPage - 1) * Number(pageSize)) + idx + 1}
                     </td>
 
                     {/* Name */}
@@ -573,6 +925,120 @@ export const ProductTable: React.FC<ProductTableProps> = ({
             </tr>
           </tfoot>
         </table>
+      </div>
+
+      {/* Pagination Bar */}
+      <div id="product-table-pagination" className="px-4 py-3 sm:py-3.5 border-t border-slate-800/80 bg-slate-950/60 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-400">
+        {/* Left: Showing items info */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span>{t('showingItems')}</span>
+          <span className="font-semibold text-slate-200 font-mono">
+            {filteredProducts.length === 0
+              ? '0'
+              : `${(validCurrentPage - 1) * (pageSize === 'all' ? filteredProducts.length : Number(pageSize)) + 1}–${Math.min(
+                  validCurrentPage * (pageSize === 'all' ? filteredProducts.length : Number(pageSize)),
+                  filteredProducts.length
+                )}`}
+          </span>
+          <span>{t('ofTotal')}</span>
+          <span className="font-semibold text-emerald-400 font-mono">
+            {filteredProducts.length} {t('itemsCount')}
+          </span>
+          {pageSize !== 'all' && totalPages > 1 && (
+            <span className="text-slate-500 ml-1">
+              ({t('page')} {validCurrentPage} / {totalPages})
+            </span>
+          )}
+        </div>
+
+        {/* Center: Pagination controls */}
+        {pageSize !== 'all' && totalPages > 1 && (
+          <div className="flex items-center gap-1">
+            {/* First Page */}
+            <button
+              onClick={() => setCurrentPage(1)}
+              disabled={validCurrentPage === 1}
+              className="p-1.5 rounded-lg border border-slate-800 bg-slate-900 hover:bg-slate-800 text-slate-300 disabled:opacity-30 disabled:pointer-events-none transition"
+              title="Birinchi sahifa"
+            >
+              <ChevronsLeft className="w-3.5 h-3.5" />
+            </button>
+
+            {/* Prev Page */}
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={validCurrentPage === 1}
+              className="p-1.5 rounded-lg border border-slate-800 bg-slate-900 hover:bg-slate-800 text-slate-300 disabled:opacity-30 disabled:pointer-events-none transition"
+              title="Oldingi sahifa"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </button>
+
+            {/* Page Numbers */}
+            {getPageNumbers(validCurrentPage, totalPages).map((pNum, i) =>
+              pNum === '...' ? (
+                <span key={`ellipsis-${i}`} className="px-1.5 py-1 text-slate-600 select-none">
+                  ...
+                </span>
+              ) : (
+                <button
+                  key={`page-${pNum}`}
+                  onClick={() => setCurrentPage(Number(pNum))}
+                  className={`min-w-7 h-7 px-2 rounded-lg text-xs font-semibold transition ${
+                    validCurrentPage === pNum
+                      ? 'bg-emerald-500 text-slate-950 font-bold shadow-xs'
+                      : 'border border-slate-800 bg-slate-900 hover:bg-slate-800 text-slate-300'
+                  }`}
+                >
+                  {pNum}
+                </button>
+              )
+            )}
+
+            {/* Next Page */}
+            <button
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={validCurrentPage === totalPages}
+              className="p-1.5 rounded-lg border border-slate-800 bg-slate-900 hover:bg-slate-800 text-slate-300 disabled:opacity-30 disabled:pointer-events-none transition"
+              title="Keyingi sahifa"
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+
+            {/* Last Page */}
+            <button
+              onClick={() => setCurrentPage(totalPages)}
+              disabled={validCurrentPage === totalPages}
+              className="p-1.5 rounded-lg border border-slate-800 bg-slate-900 hover:bg-slate-800 text-slate-300 disabled:opacity-30 disabled:pointer-events-none transition"
+              title="Oxirgi sahifa"
+            >
+              <ChevronsRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
+        {/* Right: Page Size Selector */}
+        <div className="flex items-center gap-1.5 self-end sm:self-center">
+          <span className="text-slate-400">{t('itemsPerPage')}</span>
+          <div className="flex items-center bg-slate-900 border border-slate-800 rounded-xl p-0.5">
+            {([10, 25, 50, 'all'] as const).map((size) => (
+              <button
+                key={String(size)}
+                onClick={() => {
+                  setPageSize(size);
+                  setCurrentPage(1);
+                }}
+                className={`px-2 py-0.5 rounded-lg text-xs font-medium transition ${
+                  pageSize === size
+                    ? 'bg-emerald-500 text-slate-950 font-bold'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                {size === 'all' ? t('allOption') : size}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Product Details Modal (Self-contained or fallback) */}

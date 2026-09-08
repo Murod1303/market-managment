@@ -32,6 +32,11 @@ const loginLimiter = rateLimit({
   message: { error: "Juda ko'p xato urinishlar! Iltimos, 15 daqiqadan so'ng qayta urinib ko'ring." },
   standardHeaders: true,
   legacyHeaders: false,
+  validate: {
+    xForwardedForHeader: false,
+    forwardedHeader: false,
+    default: true,
+  },
 });
 
 // 1. Auth: Login
@@ -56,7 +61,7 @@ router.post('/login', loginLimiter, (req: Request, res: Response) => {
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: error.errors[0].message });
+      res.status(400).json({ error: error.issues[0]?.message || 'Noto\'g\'ri ma\'lumot' });
     } else {
       console.error('Login Error:', error);
       res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
@@ -146,7 +151,7 @@ router.post('/', (req: Request, res: Response) => {
     res.json({ success: true, user: created });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: error.errors[0].message });
+      res.status(400).json({ error: error.issues[0]?.message || 'Noto\'g\'ri ma\'lumot' });
     } else {
       console.error('Create User Error:', error);
       res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
@@ -168,7 +173,7 @@ router.post('/change-password', (req: Request, res: Response) => {
     res.json({ success: true, message: 'Parol muvaffaqiyatli almashtirildi' });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: error.errors[0].message });
+      res.status(400).json({ error: error.issues[0]?.message || 'Noto\'g\'ri ma\'lumot' });
     } else {
       console.error('Change Password Error:', error);
       res.status(500).json({ error: 'Serverda xatolik yuz berdi' });

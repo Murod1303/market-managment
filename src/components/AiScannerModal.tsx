@@ -38,8 +38,49 @@ export const AiScannerModal: React.FC<AiScannerModalProps> = ({
 
   if (!isOpen) return null;
 
+  // Helper to optimize large mobile camera images
+  const optimizeImage = (file: File): Promise<{ base64: string; mimeType: string }> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const result = e.target?.result as string;
+        const img = new Image();
+        img.onload = () => {
+          const MAX_DIM = 1600;
+          let width = img.width;
+          let height = img.height;
+          if (width > MAX_DIM || height > MAX_DIM) {
+            if (width > height) {
+              height = Math.round((height * MAX_DIM) / width);
+              width = MAX_DIM;
+            } else {
+              width = Math.round((width * MAX_DIM) / height);
+              height = MAX_DIM;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            const compressed = canvas.toDataURL('image/jpeg', 0.85);
+            resolve({ base64: compressed, mimeType: 'image/jpeg' });
+          } else {
+            resolve({ base64: result, mimeType: file.type || 'image/jpeg' });
+          }
+        };
+        img.onerror = () => {
+          resolve({ base64: result, mimeType: file.type || 'image/jpeg' });
+        };
+        img.src = result;
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
   // Handle File Selection (Drag or Input)
-  const handleFileChange = (file: File) => {
+  const handleFileChange = async (file: File) => {
     if (!file.type.startsWith('image/')) {
       setErrorMsg(
         language === 'uz-cyrl'
@@ -49,14 +90,21 @@ export const AiScannerModal: React.FC<AiScannerModalProps> = ({
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const base64 = e.target?.result as string;
-      setSelectedImage(base64);
+    try {
+      setIsScanning(true);
       setErrorMsg(null);
-      triggerScan(base64, file.type);
-    };
-    reader.readAsDataURL(file);
+      const { base64, mimeType } = await optimizeImage(file);
+      setSelectedImage(base64);
+      triggerScan(base64, mimeType);
+    } catch {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const base64 = e.target?.result as string;
+        setSelectedImage(base64);
+        triggerScan(base64, file.type || 'image/jpeg');
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   // Trigger Gemini Vision API
@@ -259,8 +307,7 @@ export const AiScannerModal: React.FC<AiScannerModalProps> = ({
                   e.preventDefault();
                   if (e.dataTransfer.files?.[0]) handleFileChange(e.dataTransfer.files[0]);
                 }}
-                onClick={() => fileInputRef.current?.click()}
-                className="border-2 border-dashed border-slate-700 hover:border-emerald-500 bg-slate-950/50 hover:bg-emerald-950/20 rounded-2xl p-8 text-center cursor-pointer transition group"
+                className="border-2 border-dashed border-slate-700 bg-slate-950/50 rounded-2xl p-8 text-center transition group"
               >
                 <div className="w-14 h-14 mx-auto rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 group-hover:scale-110 transition">
                   <Upload className="w-7 h-7" />
@@ -272,7 +319,7 @@ export const AiScannerModal: React.FC<AiScannerModalProps> = ({
                   {t('uploadInvoiceDesc')}
                 </p>
 
-                <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
                   <input
                     type="file"
                     ref={fileInputRef}
@@ -288,16 +335,23 @@ export const AiScannerModal: React.FC<AiScannerModalProps> = ({
                     className="hidden"
                     onChange={(e) => e.target.files?.[0] && handleFileChange(e.target.files[0])}
                   />
+                  
                   <button
                     type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      cameraInputRef.current?.click();
-                    }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700/80 shadow-xs"
+                    onClick={() => cameraInputRef.current?.click()}
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 shadow-md transition"
                   >
-                    <Camera className="w-4 h-4 text-emerald-400" />
+                    <Camera className="w-4 h-4" />
                     <span>{t('takePhoto')}</span>
+                  </button>
+                  
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700/80 shadow-xs transition"
+                  >
+                    <Upload className="w-4 h-4 text-emerald-400" />
+                    <span>Galereyadan tanlash</span>
                   </button>
                 </div>
               </div>
@@ -349,9 +403,21 @@ export const AiScannerModal: React.FC<AiScannerModalProps> = ({
 
           {/* Error Message */}
           {errorMsg && (
-            <div className="p-3 bg-rose-950/60 border border-rose-800/80 rounded-xl flex items-center gap-2 text-xs text-rose-300">
-              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
-              <span>{errorMsg}</span>
+            <div className="p-4 bg-rose-950/60 border border-rose-800/80 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-rose-300">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                <span>{errorMsg}</span>
+              </div>
+              {selectedImage && !isScanning && (
+                <button
+                  type="button"
+                  onClick={() => triggerScan(selectedImage, 'image/jpeg')}
+                  className="px-3 py-1.5 rounded-lg bg-rose-900/80 hover:bg-rose-800 text-rose-100 font-medium text-xs flex items-center gap-1.5 transition shrink-0"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Qayta urinish</span>
+                </button>
+              )}
             </div>
           )}
 

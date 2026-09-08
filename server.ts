@@ -9,6 +9,9 @@ import { DIST_DIR } from './server/config/paths.ts';
 const app = express();
 const PORT = 3000;
 
+// Trust reverse proxy (Cloud Run / nginx)
+app.set('trust proxy', 1);
+
 // Body parsing middlewares
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));

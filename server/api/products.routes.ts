@@ -58,7 +58,7 @@ router.post('/', (req: Request, res: Response) => {
     res.json({ success: true, addedCount: added.length, products: productService.getAll() });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: error.errors[0].message });
+      res.status(400).json({ error: error.issues[0]?.message || 'Noto\'g\'ri ma\'lumot' });
     } else {
       console.error('Add Product Error:', error);
       res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
@@ -80,7 +80,7 @@ router.put('/:id', (req: Request, res: Response) => {
     res.json({ success: true, product: updated, products: productService.getAll() });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: error.errors[0].message });
+      res.status(400).json({ error: error.issues[0]?.message || 'Noto\'g\'ri ma\'lumot' });
     } else {
       console.error('Update Product Error:', error);
       res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
@@ -102,7 +102,7 @@ router.post('/batch-markup', (req: Request, res: Response) => {
     res.json({ success: true, updatedCount, products: productService.getAll() });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: error.errors[0].message });
+      res.status(400).json({ error: error.issues[0]?.message || 'Noto\'g\'ri ma\'lumot' });
     } else {
       console.error('Batch Markup Error:', error);
       res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
