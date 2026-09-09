@@ -63,12 +63,28 @@ export class TelegramClient {
       const res = await fetch(this.getUrl('answerCallbackQuery'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ callback_query_id: callbackQueryId, text }),
+        body: JSON.stringify({ callback_query_id: callbackQueryId, text, show_alert: !!text }),
         signal: AbortSignal.timeout(5000),
       });
       return await res.json();
     } catch (err: any) {
       console.warn('[TelegramClient] answerCallbackQuery error:', err?.message || err);
+      return null;
+    }
+  }
+
+  async editMessageReplyMarkup(chatId: number | string, messageId: number, replyMarkup: any): Promise<any> {
+    if (!this.token) return null;
+    try {
+      const res = await fetch(this.getUrl('editMessageReplyMarkup'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: chatId, message_id: messageId, reply_markup: replyMarkup }),
+        signal: AbortSignal.timeout(5000),
+      });
+      return await res.json();
+    } catch (err: any) {
+      console.warn('[TelegramClient] editMessageReplyMarkup error:', err?.message || err);
       return null;
     }
   }

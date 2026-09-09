@@ -76,13 +76,13 @@ export async function processTelegramUpdate(update: any, botToken: string): Prom
     const cbKey = String(cbChatId);
     const data = String(cb.data || '');
 
-    await telegramClient.answerCallbackQuery(cb.id);
-
     if (data.startsWith('markup_')) {
       const percent = parseFloat(data.replace('markup_', '')) || 20;
       const pending = pendingMarkupSessions.get(cbKey);
-
+      
       if (pending && pending.items.length > 0) {
+        await telegramClient.answerCallbackQuery(cb.id, "Saqlanmoqda...");
+        
         const supplierName = pending.userName ? `${pending.userName} (Telegram)` : (pending.supplier || 'Telegram Bot');
         const { addedProducts, totalCost, totalRevenue, expectedProfit } = applyMarkupToProducts(
           pending.items,
@@ -109,15 +109,20 @@ export async function processTelegramUpdate(update: any, botToken: string): Prom
             `💡 <i>Tovarlar do'kon bazasiga kiritildi va saytda aks etadi!</i>`,
           { reply_markup: getMainKeyboard(true) }
         );
+        
+        // Remove the inline keyboard from the original message if possible
+        if (cb.message?.message_id) {
+          telegramClient.editMessageReplyMarkup(cbChatId, cb.message.message_id, { inline_keyboard: [] }).catch(() => {});
+        }
+        
         return;
       } else {
-        await telegramClient.sendMessage(
-          cbChatId,
-          `⚠️ Kutilayotgan tovarlar topilmadi yoki allaqachon saqlangan. Yangi tovar qo'shish uchun /new yoki rasm yuboring.`
-        );
+        await telegramClient.answerCallbackQuery(cb.id, "Allaqachon saqlangan yoki topilmadi");
         return;
       }
     }
+    
+    await telegramClient.answerCallbackQuery(cb.id);
     return;
   }
 

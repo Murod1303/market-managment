@@ -1,5 +1,5 @@
 import fs from 'fs';
-import { DATA_DIR, USERS_FILE } from '../config/paths.ts';
+import { DATA_DIR, USERS_FILE, TELEGRAM_SESSIONS_FILE } from '../config/paths.ts';
 import { defaultUsers } from '../data/default-users.ts';
 import { AppUser, SafeUser } from '../types/index.ts';
 import { upsertDbUser as upsertToMongo } from '../mongodb.ts';
@@ -7,7 +7,37 @@ import bcrypt from 'bcryptjs';
 
 let usersCache: AppUser[] = [];
 const activeTokens = new Map<string, { user: AppUser; expiresAt: number }>();
-const telegramAuthSessions = new Map<string, { user: AppUser; token: string; loginAt: string }>();
+let telegramAuthSessions = new Map<string, { user: AppUser; token: string; loginAt: string }>();
+
+function loadTelegramSessionsFromDisk() {
+  try {
+    if (fs.existsSync(TELEGRAM_SESSIONS_FILE)) {
+      const data = fs.readFileSync(TELEGRAM_SESSIONS_FILE, 'utf-8');
+      const parsed = JSON.parse(data);
+      if (parsed && typeof parsed === 'object') {
+        for (const [key, val] of Object.entries(parsed)) {
+          telegramAuthSessions.set(key, val as any);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error reading TELEGRAM_SESSIONS_FILE:', err);
+  }
+}
+
+function persistTelegramSessions() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    const obj = Object.fromEntries(telegramAuthSessions);
+    fs.writeFileSync(TELEGRAM_SESSIONS_FILE, JSON.stringify(obj, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Error writing TELEGRAM_SESSIONS_FILE:', err);
+  }
+}
+
+loadTelegramSessionsFromDisk();
 
 function loadFromDisk(): AppUser[] {
   try {
@@ -160,9 +190,11 @@ export const userService = {
 
   setTelegramSession(key: string, session: { user: AppUser; token: string; loginAt: string }) {
     telegramAuthSessions.set(key, session);
+    persistTelegramSessions();
   },
 
   clearTelegramSession(key: string) {
     telegramAuthSessions.delete(key);
+    persistTelegramSessions();
   },
 };
