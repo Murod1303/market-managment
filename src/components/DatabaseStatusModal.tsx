@@ -18,6 +18,7 @@ import {
   Wifi,
   Clock,
   XCircle,
+  Trash2,
 } from 'lucide-react';
 
 interface DbStatusData {
@@ -99,6 +100,25 @@ export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({
       });
     } finally {
       setPingLoading(false);
+    }
+  };
+
+  const [isClearing, setIsClearing] = useState(false);
+  const [showConfirmClear, setShowConfirmClear] = useState(false);
+
+  const handleClearDatabase = async () => {
+    setIsClearing(true);
+    try {
+      const res = await fetch('/api/database/clear', { method: 'DELETE' });
+      if (res.ok) {
+        await fetchStatus();
+        window.location.reload(); // Refresh the app to update the UI completely
+      }
+    } catch (err) {
+      console.error('Failed to clear database:', err);
+    } finally {
+      setIsClearing(false);
+      setShowConfirmClear(false);
     }
   };
 
@@ -356,6 +376,42 @@ export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({
               <Zap className={`w-3.5 h-3.5 text-emerald-400 ${pingLoading ? 'animate-bounce' : ''}`} />
               Ping
             </button>
+            <div className="relative">
+              <button
+                id="footer-clear-db-btn"
+                onClick={() => setShowConfirmClear(true)}
+                disabled={isClearing}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-rose-300 bg-rose-950/60 border border-rose-500/30 hover:bg-rose-900/50 rounded-lg transition-colors disabled:opacity-50"
+              >
+                <Trash2 className={`w-3.5 h-3.5 text-rose-400 ${isClearing ? 'animate-pulse' : ''}`} />
+                Tozalash
+              </button>
+
+              {showConfirmClear && (
+                <div className="absolute bottom-full left-0 mb-2 w-64 p-3 bg-slate-900 border border-slate-700 rounded-xl shadow-xl z-50 animate-fade-in">
+                  <h4 className="text-sm font-semibold text-slate-200 mb-2">Tovarlar bazasi tozalanadi!</h4>
+                  <p className="text-xs text-slate-400 mb-3">
+                    Hamma tovarlar qaytarib bo'lmas tarzda o'chiriladi. Rozimisiz?
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleClearDatabase}
+                      disabled={isClearing}
+                      className="flex-1 px-3 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 rounded-lg transition-colors"
+                    >
+                      {isClearing ? 'O\'chirilmoqda...' : 'Ha, o\'chirish'}
+                    </button>
+                    <button
+                      onClick={() => setShowConfirmClear(false)}
+                      disabled={isClearing}
+                      className="flex-1 px-3 py-1.5 text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors"
+                    >
+                      Bekor qilish
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
           <button
             id="close-db-dialog-btn"

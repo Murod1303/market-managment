@@ -36,6 +36,18 @@ export const AiScannerModal: React.FC<AiScannerModalProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
+  React.useEffect(() => {
+    if (isOpen) {
+      setSelectedImage(null);
+      setIsScanning(false);
+      setScanResult(null);
+      setMarkupPercent(20);
+      setErrorMsg(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      if (cameraInputRef.current) cameraInputRef.current.value = '';
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   // Helper to optimize large mobile camera images

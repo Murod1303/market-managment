@@ -53,6 +53,12 @@ export const databaseService = {
     return await pingMongoDatabase();
   },
 
+  async clearProducts() {
+    await clearDbProducts();
+    productService.setAll([]);
+    return true;
+  },
+
   async sync() {
     const products = productService.getAll();
     const users = userService.getAll();

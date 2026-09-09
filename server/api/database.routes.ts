@@ -36,4 +36,15 @@ router.post('/sync', async (req: Request, res: Response) => {
   }
 });
 
+// 4. Clear products database
+router.delete('/clear', async (req: Request, res: Response) => {
+  try {
+    const success = await databaseService.clearProducts();
+    res.json({ success, message: "Baza muvaffaqiyatli tozalandi" });
+  } catch (err: any) {
+    console.error('Database Clear Error:', err);
+    res.status(500).json({ success: false, error: 'Serverda xatolik yuz berdi' });
+  }
+});
+
 export default router;
